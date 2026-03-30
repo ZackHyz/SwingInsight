@@ -43,6 +43,16 @@ The repo includes `infra/docker-compose.yml` for a local PostgreSQL service.
 
 ```bash
 docker compose -f infra/docker-compose.yml up -d
+# or, if your setup exposes the standalone binary:
+docker-compose -f infra/docker-compose.yml up -d
+```
+
+You can validate the compose file with either command:
+
+```bash
+docker compose -f infra/docker-compose.yml config
+# or
+docker-compose -f infra/docker-compose.yml config
 ```
 
 If Docker is not installed or not on `PATH`, Task 1 smoke tests can still run without the database container.
