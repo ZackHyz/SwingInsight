@@ -1,0 +1,1 @@
+"""SwingInsight backend package."""
