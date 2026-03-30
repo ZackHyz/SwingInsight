@@ -6,6 +6,8 @@ from contextlib import contextmanager
 from fastapi import Depends, FastAPI, HTTPException
 from sqlalchemy.orm import Session
 
+from swinginsight.api.routes.news import get_segment_news_payload
+from swinginsight.api.routes.segments import get_segment_detail_payload
 from swinginsight.api.routes.stocks import get_stock_research_payload
 from swinginsight.api.routes.turning_points import commit_turning_points
 from swinginsight.api.schemas.turning_points import StockResearchResponse, TurningPointCommitRequest
@@ -41,5 +43,16 @@ def create_app(session_factory: Callable[[], Session] | None = None) -> FastAPI:
         session: Session = Depends(get_session),
     ) -> dict[str, object]:
         return commit_turning_points(stock_code=stock_code, payload=payload, session=session)
+
+    @app.get("/segments/{segment_id}")
+    def get_segment(segment_id: int, session: Session = Depends(get_session)) -> dict[str, object]:
+        payload = get_segment_detail_payload(session=session, segment_id=segment_id)
+        if payload is None:
+            raise HTTPException(status_code=404, detail="segment not found")
+        return payload
+
+    @app.get("/segments/{segment_id}/news")
+    def get_segment_news(segment_id: int, session: Session = Depends(get_session)) -> list[dict[str, object]]:
+        return get_segment_news_payload(session=session, segment_id=segment_id)
 
     return app
