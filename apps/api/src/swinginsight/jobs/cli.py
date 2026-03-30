@@ -4,6 +4,7 @@ import argparse
 from datetime import date
 
 from swinginsight.jobs.import_market_data import import_daily_prices
+from swinginsight.jobs.rebuild_segments import rebuild_segments
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -15,6 +16,11 @@ def build_parser() -> argparse.ArgumentParser:
     daily_prices.add_argument("--start")
     daily_prices.add_argument("--end")
     daily_prices.add_argument("--demo", action="store_true")
+
+    segment_rebuild = subparsers.add_parser("rebuild-segments")
+    segment_rebuild.add_argument("--stock-code", required=True)
+    segment_rebuild.add_argument("--algo", default="zigzag")
+    segment_rebuild.add_argument("--demo", action="store_true")
     return parser
 
 
@@ -38,6 +44,14 @@ def main(argv: list[str] | None = None) -> int:
         print(
             f"import-daily-prices stock_code={args.stock_code} "
             f"inserted={result.inserted} updated={result.updated} skipped={result.skipped}"
+        )
+        return 0
+
+    if args.command == "rebuild-segments":
+        result = rebuild_segments(stock_code=args.stock_code, algo=args.algo, demo=args.demo)
+        print(
+            f"rebuild-segments stock_code={args.stock_code} algo={args.algo} "
+            f"turning_points={result.turning_points} segments={result.segments} version={result.version_code}"
         )
         return 0
 
