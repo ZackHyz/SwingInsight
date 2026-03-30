@@ -6,6 +6,8 @@
 .venv/
 __pycache__/
 *.pyc
+.pytest_cache/
+swinginsight.db
 node_modules/
 .next/
 dist/

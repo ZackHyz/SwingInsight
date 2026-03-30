@@ -3,7 +3,21 @@ name = "swinginsight-api"
 version = "0.1.0"
 description = "SwingInsight backend service"
 requires-python = ">=3.12"
+dependencies = [
+  "alembic>=1.18,<2.0",
+  "psycopg[binary]>=3.3,<4.0",
+  "sqlalchemy>=2.0,<3.0",
+]
 
 [build-system]
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.setuptools.package-dir]
+"" = "src"
+
+[tool.setuptools.packages.find]
+where = ["src"]
