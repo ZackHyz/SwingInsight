@@ -20,6 +20,8 @@ class SegmentNewsTimelineItem:
     relation_type: str
     distance_days: int | None
     news_date: date | None
+    sentiment: str | None = None
+    is_duplicate: bool = False
 
 
 def align_segment_news(session: Session, segment_id: int, before_days: int = 5, after_days: int = 5) -> list[SegmentNewsMap]:
@@ -128,6 +130,8 @@ def get_segment_timeline(session: Session, segment_id: int) -> list[SegmentNewsT
             relation_type=mapping.relation_type,
             distance_days=mapping.distance_days,
             news_date=news.news_date,
+            sentiment=news.sentiment,
+            is_duplicate=bool(news.is_duplicate),
         )
         for mapping, news in rows
     ]

@@ -4,6 +4,7 @@ import argparse
 from datetime import date
 
 from swinginsight.jobs.import_market_data import import_daily_prices
+from swinginsight.jobs.materialize_features import materialize_features
 from swinginsight.jobs.rebuild_segments import rebuild_segments
 
 
@@ -21,6 +22,9 @@ def build_parser() -> argparse.ArgumentParser:
     segment_rebuild.add_argument("--stock-code", required=True)
     segment_rebuild.add_argument("--algo", default="zigzag")
     segment_rebuild.add_argument("--demo", action="store_true")
+
+    materialize = subparsers.add_parser("materialize-features")
+    materialize.add_argument("--stock-code", required=True)
     return parser
 
 
@@ -52,6 +56,14 @@ def main(argv: list[str] | None = None) -> int:
         print(
             f"rebuild-segments stock_code={args.stock_code} algo={args.algo} "
             f"turning_points={result.turning_points} segments={result.segments} version={result.version_code}"
+        )
+        return 0
+
+    if args.command == "materialize-features":
+        result = materialize_features(stock_code=args.stock_code)
+        print(
+            f"materialize-features stock_code={args.stock_code} "
+            f"segments={result.segments} features={result.features}"
         )
         return 0
 

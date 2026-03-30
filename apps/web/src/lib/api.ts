@@ -58,6 +58,7 @@ export type ApiClient = {
   getStockResearch: (stockCode: string) => Promise<StockResearchData>;
   commitTurningPoints: (stockCode: string, payload: TurningPointCommitPayload) => Promise<TurningPointCommitResponse>;
   getSegmentDetail: (segmentId: string) => Promise<SegmentDetailData>;
+  getSegmentLibrary: () => Promise<SegmentLibraryData>;
 };
 
 export type SegmentDetailData = {
@@ -91,6 +92,17 @@ export type SegmentDetailData = {
   }>;
 };
 
+export type SegmentLibraryData = {
+  rows: Array<{
+    id: number;
+    stock_code: string;
+    segment_type: string | null;
+    label_names: string[];
+    pct_change: number | null;
+    duration_days: number | null;
+  }>;
+};
+
 export const apiClient: ApiClient = {
   async getStockResearch(stockCode) {
     const response = await fetch(`http://127.0.0.1:8000/stocks/${stockCode}`);
@@ -118,5 +130,12 @@ export const apiClient: ApiClient = {
       throw new Error(`Failed to load segment detail: ${response.status}`);
     }
     return (await response.json()) as SegmentDetailData;
+  },
+  async getSegmentLibrary() {
+    const response = await fetch("http://127.0.0.1:8000/library");
+    if (!response.ok) {
+      throw new Error(`Failed to load segment library: ${response.status}`);
+    }
+    return (await response.json()) as SegmentLibraryData;
   },
 };

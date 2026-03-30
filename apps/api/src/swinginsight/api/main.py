@@ -10,8 +10,9 @@ from swinginsight.api.routes.news import get_segment_news_payload
 from swinginsight.api.routes.segments import get_segment_detail_payload
 from swinginsight.api.routes.stocks import get_stock_research_payload
 from swinginsight.api.routes.turning_points import commit_turning_points
-from swinginsight.api.schemas.turning_points import StockResearchResponse, TurningPointCommitRequest
 from swinginsight.db.session import session_scope
+from swinginsight.services.feature_materialization_service import get_segment_library_rows
+from swinginsight.api.schemas.turning_points import StockResearchResponse, TurningPointCommitRequest
 
 
 def create_app(session_factory: Callable[[], Session] | None = None) -> FastAPI:
@@ -54,5 +55,9 @@ def create_app(session_factory: Callable[[], Session] | None = None) -> FastAPI:
     @app.get("/segments/{segment_id}/news")
     def get_segment_news(segment_id: int, session: Session = Depends(get_session)) -> list[dict[str, object]]:
         return get_segment_news_payload(session=session, segment_id=segment_id)
+
+    @app.get("/library")
+    def get_library(session: Session = Depends(get_session)) -> dict[str, object]:
+        return {"rows": get_segment_library_rows(session)}
 
     return app
