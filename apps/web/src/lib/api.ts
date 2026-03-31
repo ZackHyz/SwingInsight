@@ -29,6 +29,15 @@ export type StockResearchData = {
   current_state: {
     label: string;
     summary: string;
+    probabilities?: Record<string, number>;
+    key_features?: Record<string, number>;
+    risk_flags?: Record<string, string>;
+    similar_cases?: Array<{
+      segment_id: number;
+      stock_code: string;
+      score: number;
+      pct_change: number | null;
+    }>;
   };
 };
 
@@ -59,6 +68,7 @@ export type ApiClient = {
   commitTurningPoints: (stockCode: string, payload: TurningPointCommitPayload) => Promise<TurningPointCommitResponse>;
   getSegmentDetail: (segmentId: string) => Promise<SegmentDetailData>;
   getSegmentLibrary: () => Promise<SegmentLibraryData>;
+  getPrediction: (stockCode: string, predictDate: string) => Promise<PredictionData>;
 };
 
 export type SegmentDetailData = {
@@ -103,6 +113,22 @@ export type SegmentLibraryData = {
   }>;
 };
 
+export type PredictionData = {
+  stock_code: string;
+  predict_date: string;
+  current_state: string;
+  summary: string;
+  probabilities: Record<string, number>;
+  key_features: Record<string, number>;
+  risk_flags: Record<string, string>;
+  similar_cases: Array<{
+    segment_id: number;
+    stock_code: string;
+    score: number;
+    pct_change: number | null;
+  }>;
+};
+
 export const apiClient: ApiClient = {
   async getStockResearch(stockCode) {
     const response = await fetch(`http://127.0.0.1:8000/stocks/${stockCode}`);
@@ -137,5 +163,12 @@ export const apiClient: ApiClient = {
       throw new Error(`Failed to load segment library: ${response.status}`);
     }
     return (await response.json()) as SegmentLibraryData;
+  },
+  async getPrediction(stockCode, predictDate) {
+    const response = await fetch(`http://127.0.0.1:8000/predictions/${stockCode}?predict_date=${predictDate}`);
+    if (!response.ok) {
+      throw new Error(`Failed to load prediction: ${response.status}`);
+    }
+    return (await response.json()) as PredictionData;
   },
 };

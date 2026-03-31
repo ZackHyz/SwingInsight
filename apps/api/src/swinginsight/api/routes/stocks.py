@@ -4,9 +4,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from swinginsight.db.models.market_data import DailyPrice
-from swinginsight.db.models.prediction import PredictionResult
 from swinginsight.db.models.stock import StockBasic
 from swinginsight.db.models.turning_point import TurningPoint
+from swinginsight.api.routes.predictions import load_latest_prediction_summary
 
 
 def get_stock_research_payload(session: Session, stock_code: str) -> dict[str, object] | None:
@@ -27,11 +27,7 @@ def get_stock_research_payload(session: Session, stock_code: str) -> dict[str, o
         .where(TurningPoint.stock_code == stock_code, TurningPoint.is_final.is_(True))
         .order_by(TurningPoint.point_date.asc(), TurningPoint.id.asc())
     ).all()
-    prediction = session.scalar(
-        select(PredictionResult)
-        .where(PredictionResult.stock_code == stock_code)
-        .order_by(PredictionResult.predict_date.desc(), PredictionResult.id.desc())
-    )
+    prediction = load_latest_prediction_summary(session, stock_code)
 
     return {
         "stock": {
@@ -72,8 +68,14 @@ def get_stock_research_payload(session: Session, stock_code: str) -> dict[str, o
             for row in final_points
         ],
         "trade_markers": [],
-        "current_state": {
-            "label": prediction.current_state if prediction else "placeholder",
-            "summary": prediction.summary if prediction else "Prediction pending",
+        "current_state": prediction
+        if prediction
+        else {
+            "label": "placeholder",
+            "summary": "Prediction pending",
+            "probabilities": {},
+            "key_features": {},
+            "risk_flags": {},
+            "similar_cases": [],
         },
     }

@@ -1,5 +1,6 @@
 "use client";
 
+import { PredictionPanel } from "../../../components/prediction-panel";
 import { TurningPointEditor } from "../../../components/turning-point-editor";
 import { apiClient, type ApiClient, type StockResearchData } from "../../../lib/api";
 
@@ -29,6 +30,10 @@ function buildFallbackData(stockCode: string): StockResearchData {
     current_state: {
       label: "placeholder",
       summary: "Prediction pending",
+      probabilities: {},
+      key_features: {},
+      risk_flags: {},
+      similar_cases: [],
     },
   };
 }
@@ -49,6 +54,8 @@ export default function StockResearchPage(props: StockResearchPageProps) {
         </p>
         <p>当前状态: {pageData.current_state.label}</p>
       </section>
+
+      <PredictionPanel currentState={pageData.current_state} />
 
       <TurningPointEditor stockCode={stockCode} initialData={pageData} apiClient={client} />
     </main>

@@ -3,10 +3,13 @@ from __future__ import annotations
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 
+from datetime import date
+
 from fastapi import Depends, FastAPI, HTTPException
 from sqlalchemy.orm import Session
 
 from swinginsight.api.routes.news import get_segment_news_payload
+from swinginsight.api.routes.predictions import get_prediction_payload
 from swinginsight.api.routes.segments import get_segment_detail_payload
 from swinginsight.api.routes.stocks import get_stock_research_payload
 from swinginsight.api.routes.turning_points import commit_turning_points
@@ -59,5 +62,9 @@ def create_app(session_factory: Callable[[], Session] | None = None) -> FastAPI:
     @app.get("/library")
     def get_library(session: Session = Depends(get_session)) -> dict[str, object]:
         return {"rows": get_segment_library_rows(session)}
+
+    @app.get("/predictions/{stock_code}")
+    def get_prediction(stock_code: str, predict_date: date, session: Session = Depends(get_session)) -> dict[str, object]:
+        return get_prediction_payload(session=session, stock_code=stock_code, predict_date=predict_date)
 
     return app

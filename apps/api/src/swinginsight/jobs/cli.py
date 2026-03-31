@@ -5,6 +5,7 @@ from datetime import date
 
 from swinginsight.jobs.import_market_data import import_daily_prices
 from swinginsight.jobs.materialize_features import materialize_features
+from swinginsight.jobs.predict_state import predict_state
 from swinginsight.jobs.rebuild_segments import rebuild_segments
 
 
@@ -25,6 +26,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     materialize = subparsers.add_parser("materialize-features")
     materialize.add_argument("--stock-code", required=True)
+
+    predict = subparsers.add_parser("predict-state")
+    predict.add_argument("--stock-code", required=True)
+    predict.add_argument("--predict-date", required=True)
     return parser
 
 
@@ -64,6 +69,14 @@ def main(argv: list[str] | None = None) -> int:
         print(
             f"materialize-features stock_code={args.stock_code} "
             f"segments={result.segments} features={result.features}"
+        )
+        return 0
+
+    if args.command == "predict-state":
+        result = predict_state(stock_code=args.stock_code, predict_date=parse_optional_date(args.predict_date))
+        print(
+            f"predict-state stock_code={args.stock_code} predict_date={args.predict_date} "
+            f"current_state={result.current_state} up_prob_10d={result.up_prob_10d:.4f}"
         )
         return 0
 
