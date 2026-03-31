@@ -4,7 +4,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import SegmentDetailPage from "../src/app/segments/[segmentId]/page";
-import type { SegmentDetailData } from "../src/lib/api";
+import type { ApiClient, SegmentDetailData } from "../src/lib/api";
 
 function buildData(): SegmentDetailData {
   return {
@@ -50,11 +50,19 @@ describe("segment detail page", () => {
   afterEach(() => cleanup());
 
   it("renders segment summary and news timeline", () => {
+    const apiClient: ApiClient = {
+      getStockResearch: vi.fn(),
+      commitTurningPoints: vi.fn(),
+      getSegmentDetail: vi.fn(),
+      getSegmentLibrary: vi.fn(),
+      getPrediction: vi.fn(),
+    };
+
     render(
       <SegmentDetailPage
         segmentId="1"
         initialData={buildData()}
-        apiClient={{ getStockResearch: vi.fn(), commitTurningPoints: vi.fn(), getSegmentDetail: vi.fn() }}
+        apiClient={apiClient}
       />
     );
 

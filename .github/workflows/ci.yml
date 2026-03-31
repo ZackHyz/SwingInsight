@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install backend deps
+        run: |
+          python -m venv .venv
+          .venv/bin/pip install -e apps/api pytest
+      - name: Backend syntax check
+        run: .venv/bin/python -m compileall apps/api/src
+      - name: Backend tests
+        run: |
+          cd apps/api
+          ../../.venv/bin/pytest -v
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - name: Install frontend deps
+        run: pnpm --dir apps/web install
+      - name: Typecheck
+        run: pnpm --dir apps/web typecheck
+      - name: Frontend unit tests
+        run: pnpm --dir apps/web test -- --run
+      - name: Install Playwright browser
+        run: pnpm --dir apps/web exec playwright install --with-deps chromium
+      - name: Frontend Playwright smoke
+        run: pnpm --dir apps/web test:e2e

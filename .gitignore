@@ -12,3 +12,6 @@ node_modules/
 .next/
 dist/
 coverage/
+.pnpm-store/
+*.egg-info/
+test-results/

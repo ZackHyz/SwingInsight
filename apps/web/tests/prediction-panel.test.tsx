@@ -4,7 +4,7 @@ import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import StockResearchPage from "../src/app/stocks/[stockCode]/page";
-import type { StockResearchData } from "../src/lib/api";
+import type { ApiClient, StockResearchData } from "../src/lib/api";
 
 function buildData(): StockResearchData {
   return {
@@ -60,11 +60,19 @@ describe("prediction panel", () => {
   afterEach(() => cleanup());
 
   it("renders state, probabilities, and similar cases", () => {
+    const apiClient: ApiClient = {
+      getStockResearch: vi.fn(),
+      commitTurningPoints: vi.fn(),
+      getSegmentDetail: vi.fn(),
+      getSegmentLibrary: vi.fn(),
+      getPrediction: vi.fn(),
+    };
+
     render(
       <StockResearchPage
         stockCode="000001"
         initialData={buildData()}
-        apiClient={{ getStockResearch: vi.fn(), commitTurningPoints: vi.fn(), getSegmentDetail: vi.fn(), getSegmentLibrary: vi.fn() }}
+        apiClient={apiClient}
       />
     );
 

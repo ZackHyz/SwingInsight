@@ -5,7 +5,7 @@ import { cleanup } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import StockResearchPage from "../src/app/stocks/[stockCode]/page";
-import type { StockResearchData, TurningPointCommitPayload } from "../src/lib/api";
+import type { ApiClient, StockResearchData, TurningPointCommitPayload, TurningPointCommitResponse } from "../src/lib/api";
 
 function buildData(): StockResearchData {
   return {
@@ -42,7 +42,8 @@ describe("turning point editor", () => {
   });
 
   it("lets the user select trough mode, click the chart, and save edits", async () => {
-    const commit = vi.fn<(stockCode: string, payload: TurningPointCommitPayload) => Promise<{ final_turning_points: unknown[]; rebuild_summary: { segments: number; version_code: string } }>>()
+    const commit = vi
+      .fn<(stockCode: string, payload: TurningPointCommitPayload) => Promise<TurningPointCommitResponse>>()
       .mockResolvedValue({
         final_turning_points: [
           { id: 21, point_date: "2024-01-03", point_type: "trough", point_price: 9.4, source_type: "manual" },
@@ -50,12 +51,19 @@ describe("turning point editor", () => {
         ],
         rebuild_summary: { segments: 1, version_code: "manual:latest" },
       });
+    const apiClient: ApiClient = {
+      getStockResearch: vi.fn(),
+      commitTurningPoints: commit,
+      getSegmentDetail: vi.fn(),
+      getSegmentLibrary: vi.fn(),
+      getPrediction: vi.fn(),
+    };
 
     render(
       <StockResearchPage
         stockCode="000001"
         initialData={buildData()}
-        apiClient={{ getStockResearch: vi.fn(), commitTurningPoints: commit }}
+        apiClient={apiClient}
       />
     );
 
@@ -70,11 +78,19 @@ describe("turning point editor", () => {
   });
 
   it("lets the user select, move, and delete a final point", () => {
+    const apiClient: ApiClient = {
+      getStockResearch: vi.fn(),
+      commitTurningPoints: vi.fn(),
+      getSegmentDetail: vi.fn(),
+      getSegmentLibrary: vi.fn(),
+      getPrediction: vi.fn(),
+    };
+
     render(
       <StockResearchPage
         stockCode="000001"
         initialData={buildData()}
-        apiClient={{ getStockResearch: vi.fn(), commitTurningPoints: vi.fn() }}
+        apiClient={apiClient}
       />
     );
 

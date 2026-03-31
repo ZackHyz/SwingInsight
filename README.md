@@ -15,9 +15,9 @@ SwingInsight is an A-share swing research workspace for turning-point detection,
 
 ```bash
 python3 -m venv .venv
-.venv/bin/pip install pytest
+.venv/bin/pip install -e apps/api pytest
 cd apps/api
-../../.venv/bin/pytest tests/test_smoke.py -v
+../../.venv/bin/pytest -v
 ```
 
 ### Frontend
@@ -26,6 +26,15 @@ cd apps/api
 cd apps/web
 pnpm install
 pnpm test -- --run
+pnpm typecheck
+```
+
+Playwright smoke coverage:
+
+```bash
+cd apps/web
+pnpm exec playwright install chromium
+pnpm test:e2e
 ```
 
 ## Environment Variables
@@ -56,3 +65,24 @@ docker-compose -f infra/docker-compose.yml config
 ```
 
 If Docker is not installed or not on `PATH`, Task 1 smoke tests can still run without the database container.
+
+## Demo Seed And Launch
+
+Seed repeatable demo data into a local SQLite database:
+
+```bash
+.venv/bin/python apps/api/scripts/seed_demo_data.py
+```
+
+Launch the API plus browser smoke harness:
+
+```bash
+make demo
+```
+
+The default demo URLs are:
+
+- `http://127.0.0.1:8000/stocks/000001`
+- `http://127.0.0.1:4173/stocks/000001`
+
+See `docs/runbooks/dev-setup.md` and `docs/runbooks/demo-flow.md` for the full developer and demo walkthroughs.
