@@ -8,6 +8,7 @@ from swinginsight.db.models.news import NewsRaw
 from swinginsight.db.models.stock import StockBasic
 from swinginsight.db.models.turning_point import TurningPoint
 from swinginsight.api.routes.predictions import load_latest_prediction_summary
+from swinginsight.services.current_news_window_service import build_current_news_summary
 
 
 def get_stock_research_payload(session: Session, stock_code: str) -> dict[str, object] | None:
@@ -35,6 +36,7 @@ def get_stock_research_payload(session: Session, stock_code: str) -> dict[str, o
         select(NewsRaw).where(NewsRaw.stock_code == stock_code).order_by(NewsRaw.news_date.desc(), NewsRaw.id.desc()).limit(5)
     ).all()
     prediction = load_latest_prediction_summary(session, stock_code)
+    latest_trade_date = prices[-1].trade_date if prices else None
 
     return {
         "stock": {
@@ -106,5 +108,8 @@ def get_stock_research_payload(session: Session, stock_code: str) -> dict[str, o
             "key_features": {},
             "risk_flags": {},
             "similar_cases": [],
+            "news_summary": build_current_news_summary(session, stock_code, latest_trade_date)
+            if latest_trade_date is not None
+            else {},
         },
     }

@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from swinginsight.db.models.market_data import DailyPrice
 from swinginsight.db.models.prediction import PredictionResult
 from swinginsight.db.models.segment import SwingSegment
+from swinginsight.services.current_news_window_service import build_current_news_summary
 from swinginsight.services.prediction_service import PredictionService, SimilarCase, SIMILAR_CASE_RETURN_HORIZONS
 
 
@@ -50,6 +51,7 @@ def get_prediction_payload(session: Session, stock_code: str, predict_date: date
         },
         "key_features": result.key_features,
         "risk_flags": result.risk_flags,
+        "news_summary": build_current_news_summary(session, stock_code, predict_date),
         "similar_cases": [_serialize_similar_case(case) for case in result.similar_cases],
     }
 
@@ -81,6 +83,7 @@ def load_latest_prediction_summary(session: Session, stock_code: str) -> dict[st
         },
         "key_features": result.key_features,
         "risk_flags": result.risk_flags,
+        "news_summary": build_current_news_summary(session, stock_code, latest_trade_date),
         "similar_cases": [_serialize_similar_case(case) for case in result.similar_cases],
     }
 

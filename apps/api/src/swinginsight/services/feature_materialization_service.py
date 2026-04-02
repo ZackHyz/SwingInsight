@@ -6,9 +6,9 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from swinginsight.db.models.market_data import DailyPrice
-from swinginsight.db.models.news import NewsRaw, SegmentNewsMap
+from swinginsight.db.models.news import NewsProcessed, NewsRaw, SegmentNewsMap
 from swinginsight.db.models.segment import SegmentFeature, SegmentLabel, SwingSegment
-from swinginsight.domain.features.news import compute_news_features
+from swinginsight.domain.features.news import NewsFeatureItem, compute_news_features
 from swinginsight.domain.features.technical import compute_technical_features
 from swinginsight.domain.labels.rules import derive_labels
 from swinginsight.services.segment_news_alignment_service import align_segment_news
@@ -21,14 +21,6 @@ FEATURE_VERSION = "feature:v1"
 class MaterializationResult:
     features: list[SegmentFeature]
     labels: list[SegmentLabel]
-
-
-@dataclass(slots=True, frozen=True)
-class NewsFeatureItem:
-    relation_type: str
-    sentiment: str | None
-    is_duplicate: bool
-
 
 def materialize_segment_features(session: Session, segment_id: int) -> list[SegmentFeature]:
     segment = session.scalar(select(SwingSegment).where(SwingSegment.id == segment_id))
@@ -50,13 +42,28 @@ def materialize_segment_features(session: Session, segment_id: int) -> list[Segm
         align_segment_news(session, segment_id=segment_id, before_days=5, after_days=5)
 
     news_rows = session.execute(
-        select(SegmentNewsMap.relation_type, NewsRaw.sentiment, NewsRaw.is_duplicate)
+        select(
+            SegmentNewsMap.relation_type,
+            NewsRaw.sentiment,
+            NewsRaw.is_duplicate,
+            NewsProcessed.category,
+            NewsProcessed.heat_level,
+            NewsProcessed.sub_category,
+        )
         .join(NewsRaw, NewsRaw.id == SegmentNewsMap.news_id)
+        .outerjoin(NewsProcessed, NewsProcessed.news_id == NewsRaw.id)
         .where(SegmentNewsMap.segment_id == segment_id)
     ).all()
     news_items = [
-        NewsFeatureItem(relation_type=relation_type, sentiment=sentiment, is_duplicate=bool(is_duplicate))
-        for relation_type, sentiment, is_duplicate in news_rows
+        NewsFeatureItem(
+            relation_type=relation_type,
+            sentiment=sentiment,
+            is_duplicate=bool(is_duplicate),
+            category=category,
+            heat_level=heat_level,
+            sub_category=sub_category,
+        )
+        for relation_type, sentiment, is_duplicate, category, heat_level, sub_category in news_rows
     ]
 
     technical = compute_technical_features(segment, price_rows)

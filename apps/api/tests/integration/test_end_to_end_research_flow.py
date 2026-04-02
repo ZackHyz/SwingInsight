@@ -57,3 +57,4 @@ def test_end_to_end_research_flow() -> None:
     assert research_payload["prices"]
     assert research_payload["final_turning_points"]
     assert research_payload["current_state"]["label"] != "placeholder"
+    assert "news_summary" in research_payload["current_state"]
