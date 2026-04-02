@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import date, timedelta
 
 from sqlalchemy import func, select
@@ -12,6 +13,9 @@ from swinginsight.db.models.stock import StockBasic
 from swinginsight.db.models.turning_point import TurningPoint
 from swinginsight.ingest.daily_price_importer import DailyPriceImporter, ImportResult
 from swinginsight.jobs.import_market_data import build_daily_price_feed, ensure_stock_basic
+from swinginsight.jobs.import_news import import_news, resolve_news_refresh_window
+from swinginsight.jobs.process_news import process_news
+from swinginsight.jobs.align_news import align_news
 from swinginsight.services.feature_materialization_service import materialize_segment_features
 from swinginsight.services.manual_turning_point_service import MANUAL_VERSION_CODE
 from swinginsight.services.prediction_service import PredictionService
@@ -21,6 +25,17 @@ from swinginsight.services.turning_point_service import TurningPointService
 
 RESEARCH_LOOKBACK_DAYS = 730
 RESEARCH_REFRESH_BUFFER_DAYS = 45
+
+
+@dataclass(slots=True, frozen=True)
+class NewsRefreshResult:
+    start_date: date
+    end_date: date
+    inserted: int
+    processed_count: int
+    duplicates: int
+    point_mappings: int
+    segment_mappings: int
 
 
 def research_window_start(anchor_date: date | None = None) -> date:
@@ -42,12 +57,23 @@ class StockResearchService:
     def ensure_stock_ready(self, stock_code: str) -> bool:
         latest_trade_date_before_refresh = self._load_latest_trade_date(stock_code)
         import_result = self._refresh_live_prices(stock_code, latest_trade_date=latest_trade_date_before_refresh)
+        self.session.commit()
         latest_trade_date = self._load_latest_trade_date(stock_code)
         if latest_trade_date is None:
             return False
+        self.session.commit()
+
+        news_refresh = self._refresh_news_window(stock_code=stock_code, anchor_date=latest_trade_date)
+        self.session.expire_all()
 
         if self._needs_rebuild(stock_code=stock_code, latest_trade_date=latest_trade_date) or self._has_live_price_updates(import_result):
             self._rebuild_research_artifacts(stock_code=stock_code, latest_trade_date=latest_trade_date)
+        elif self._has_news_updates(news_refresh):
+            self._refresh_news_features(
+                stock_code=stock_code,
+                latest_trade_date=latest_trade_date,
+                window_start=news_refresh.start_date,
+            )
 
         self.session.flush()
         return self._stock_exists(stock_code)
@@ -80,6 +106,42 @@ class StockResearchService:
 
     def _has_live_price_updates(self, import_result: ImportResult) -> bool:
         return import_result.inserted > 0 or import_result.updated > 0
+
+    def _refresh_news_window(self, *, stock_code: str, anchor_date: date) -> NewsRefreshResult:
+        window_start, window_end = resolve_news_refresh_window(end=anchor_date)
+        inserted = import_news(stock_code=stock_code, start=window_start, end=window_end, session=self.session)
+        processing = process_news(stock_code=stock_code, start=window_start, end=window_end, session=self.session)
+        alignment = align_news(stock_code=stock_code, start=window_start, end=window_end, session=self.session)
+        return NewsRefreshResult(
+            start_date=window_start,
+            end_date=window_end,
+            inserted=inserted,
+            processed_count=processing.processed_count,
+            duplicates=processing.duplicates,
+            point_mappings=alignment.point_mappings,
+            segment_mappings=alignment.segment_mappings,
+        )
+
+    def _has_news_updates(self, result: NewsRefreshResult) -> bool:
+        return result.inserted > 0 or result.processed_count > 0 or result.point_mappings > 0 or result.segment_mappings > 0
+
+    def _refresh_news_features(self, *, stock_code: str, latest_trade_date: date, window_start: date) -> None:
+        overlap_start = window_start - timedelta(days=5)
+        segments = self.session.scalars(
+            select(SwingSegment)
+            .where(
+                SwingSegment.stock_code == stock_code,
+                SwingSegment.is_final.is_(True),
+                SwingSegment.end_date >= overlap_start,
+                SwingSegment.start_date <= latest_trade_date,
+            )
+            .order_by(SwingSegment.end_date.asc(), SwingSegment.id.asc())
+        ).all()
+        for segment in segments:
+            materialize_segment_features(self.session, segment.id)
+
+        if segments:
+            PredictionService(self.session).predict(stock_code, latest_trade_date)
 
     def _rebuild_research_artifacts(self, *, stock_code: str, latest_trade_date) -> None:
         turning_point_result = TurningPointService(self.session).rebuild_points(

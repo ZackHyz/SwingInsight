@@ -46,6 +46,12 @@ Copy `.env.example` to `.env` and provide real values locally.
 - `DATA_SOURCE_PRIORITY_NEWS`: source priority for news ingestion
 - `DATA_SOURCE_PRIORITY_METADATA`: source priority for stock metadata
 
+News source priority currently supports `cninfo`, `eastmoney`, `akshare`, and `demo`. Example:
+
+```bash
+export DATA_SOURCE_PRIORITY_NEWS=cninfo,eastmoney,akshare
+```
+
 ## Infrastructure
 
 The repo includes `infra/docker-compose.yml` for a local PostgreSQL service.
@@ -86,3 +92,41 @@ The default demo URLs are:
 - `http://127.0.0.1:4173/stocks/000001`
 
 See `docs/runbooks/dev-setup.md` and `docs/runbooks/demo-flow.md` for the full developer and demo walkthroughs.
+
+## News Pipeline Operations
+
+Incremental news refresh defaults to the most recent 7 calendar days when `--start/--end` are omitted.
+
+```bash
+cd apps/api
+../../.venv/bin/python -m swinginsight.jobs.cli import-news --stock-code 000001
+../../.venv/bin/python -m swinginsight.jobs.cli process-news --stock-code 000001
+../../.venv/bin/python -m swinginsight.jobs.cli align-news --stock-code 000001
+```
+
+Backfill a bounded window explicitly:
+
+```bash
+cd apps/api
+../../.venv/bin/python -m swinginsight.jobs.cli import-news --stock-code 000001 --start 2026-03-01 --end 2026-03-31 --source cninfo --source eastmoney
+../../.venv/bin/python -m swinginsight.jobs.cli process-news --stock-code 000001 --start 2026-03-01 --end 2026-03-31
+../../.venv/bin/python -m swinginsight.jobs.cli align-news --stock-code 000001 --start 2026-03-01 --end 2026-03-31
+```
+
+Page-driven research requests call the same incremental pipeline automatically for the latest trading-date window, then only rematerialize overlapping segment features instead of rebuilding all historical news mappings.
+
+## Failure Debugging
+
+Start from `task_run_log` when a news job appears stale or empty:
+
+```sql
+select task_type, target_code, status, result_summary, error_message, start_time
+from task_run_log
+order by start_time desc;
+```
+
+Then check the three persistent stages directly:
+
+- `news_raw`: source ingestion and dedupe inputs
+- `news_processed`: classification, sentiment, heat, keywords
+- `point_news_map` / `segment_news_map`: turning-point and segment alignment outputs

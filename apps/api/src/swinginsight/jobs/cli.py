@@ -3,10 +3,12 @@ from __future__ import annotations
 import argparse
 from datetime import date
 
+from swinginsight.jobs.align_news import align_news
 from swinginsight.jobs.import_market_data import import_daily_prices
 from swinginsight.jobs.import_news import import_news
 from swinginsight.jobs.materialize_features import materialize_features
 from swinginsight.jobs.predict_state import predict_state
+from swinginsight.jobs.process_news import process_news
 from swinginsight.jobs.rebuild_segments import rebuild_segments
 
 
@@ -26,6 +28,16 @@ def build_parser() -> argparse.ArgumentParser:
     news_import.add_argument("--end")
     news_import.add_argument("--source", action="append", dest="sources")
     news_import.add_argument("--demo", action="store_true")
+
+    process_news_parser = subparsers.add_parser("process-news")
+    process_news_parser.add_argument("--stock-code", required=True)
+    process_news_parser.add_argument("--start")
+    process_news_parser.add_argument("--end")
+
+    align_news_parser = subparsers.add_parser("align-news")
+    align_news_parser.add_argument("--stock-code", required=True)
+    align_news_parser.add_argument("--start")
+    align_news_parser.add_argument("--end")
 
     segment_rebuild = subparsers.add_parser("rebuild-segments")
     segment_rebuild.add_argument("--stock-code", required=True)
@@ -73,6 +85,30 @@ def main(argv: list[str] | None = None) -> int:
             source_list=args.sources,
         )
         print(f"import-news stock_code={args.stock_code} inserted={inserted}")
+        return 0
+
+    if args.command == "process-news":
+        result = process_news(
+            stock_code=args.stock_code,
+            start=parse_optional_date(args.start),
+            end=parse_optional_date(args.end),
+        )
+        print(
+            f"process-news stock_code={args.stock_code} "
+            f"processed={result.processed_count} duplicates={result.duplicates}"
+        )
+        return 0
+
+    if args.command == "align-news":
+        result = align_news(
+            stock_code=args.stock_code,
+            start=parse_optional_date(args.start),
+            end=parse_optional_date(args.end),
+        )
+        print(
+            f"align-news stock_code={args.stock_code} "
+            f"point_mappings={result.point_mappings} segment_mappings={result.segment_mappings}"
+        )
         return 0
 
     if args.command == "rebuild-segments":
