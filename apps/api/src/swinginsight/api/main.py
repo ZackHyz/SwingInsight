@@ -8,7 +8,7 @@ from datetime import date
 from fastapi import Depends, FastAPI, HTTPException
 from sqlalchemy.orm import Session
 
-from swinginsight.api.routes.news import get_segment_news_payload
+from swinginsight.api.routes.news import get_segment_news_payload, get_turning_point_news_payload
 from swinginsight.api.routes.predictions import get_prediction_payload
 from swinginsight.api.routes.segments import get_segment_chart_payload, get_segment_detail_payload
 from swinginsight.api.routes.stocks import get_stock_research_payload
@@ -68,6 +68,10 @@ def create_app(session_factory: Callable[[], Session] | None = None) -> FastAPI:
     @app.get("/segments/{segment_id}/news")
     def get_segment_news(segment_id: int, session: Session = Depends(get_session)) -> list[dict[str, object]]:
         return get_segment_news_payload(session=session, segment_id=segment_id)
+
+    @app.get("/turning-points/{point_id}/news")
+    def get_turning_point_news(point_id: int, session: Session = Depends(get_session)) -> list[dict[str, object]]:
+        return get_turning_point_news_payload(session=session, point_id=point_id)
 
     @app.get("/library")
     def get_library(session: Session = Depends(get_session)) -> dict[str, object]:

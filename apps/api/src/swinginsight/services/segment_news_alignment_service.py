@@ -6,7 +6,7 @@ from datetime import date
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
-from swinginsight.db.models.news import NewsRaw, SegmentNewsMap
+from swinginsight.db.models.news import NewsProcessed, NewsRaw, SegmentNewsMap
 from swinginsight.db.models.segment import SwingSegment
 from swinginsight.domain.news.dedupe import dedupe_news_items
 
@@ -22,6 +22,10 @@ class SegmentNewsTimelineItem:
     news_date: date | None
     sentiment: str | None = None
     is_duplicate: bool = False
+    category: str | None = None
+    sub_category: str | None = None
+    heat_level: str | None = None
+    keyword_list: list[str] | None = None
 
 
 def align_segment_news(session: Session, segment_id: int, before_days: int = 5, after_days: int = 5) -> list[SegmentNewsMap]:
@@ -116,8 +120,9 @@ def classify_news_relation(
 
 def get_segment_timeline(session: Session, segment_id: int) -> list[SegmentNewsTimelineItem]:
     rows = session.execute(
-        select(SegmentNewsMap, NewsRaw)
+        select(SegmentNewsMap, NewsRaw, NewsProcessed)
         .join(NewsRaw, NewsRaw.id == SegmentNewsMap.news_id)
+        .outerjoin(NewsProcessed, NewsProcessed.news_id == NewsRaw.id)
         .where(SegmentNewsMap.segment_id == segment_id)
         .order_by(NewsRaw.news_date.asc(), NewsRaw.id.asc())
     ).all()
@@ -130,8 +135,12 @@ def get_segment_timeline(session: Session, segment_id: int) -> list[SegmentNewsT
             relation_type=mapping.relation_type,
             distance_days=mapping.distance_days,
             news_date=news.news_date,
-            sentiment=news.sentiment,
+            sentiment=processed.sentiment if processed is not None else news.sentiment,
             is_duplicate=bool(news.is_duplicate),
+            category=processed.category if processed is not None else None,
+            sub_category=processed.sub_category if processed is not None else None,
+            heat_level=processed.heat_level if processed is not None else None,
+            keyword_list=processed.keyword_list if processed is not None else None,
         )
-        for mapping, news in rows
+        for mapping, news, processed in rows
     ]
