@@ -81,3 +81,41 @@ def test_cli_rebuild_segments_persists_turning_points_and_segments(tmp_path) -> 
         assert segments[0] == 3
     finally:
         connection.close()
+
+
+def test_cli_exposes_import_news(tmp_path) -> None:
+    db_path = tmp_path / "cli-news.db"
+    env = os.environ.copy()
+    env["DATABASE_URL"] = f"sqlite+pysqlite:///{db_path}"
+    env["PYTHONPATH"] = str(ROOT / "src")
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "swinginsight.jobs.cli",
+            "import-news",
+            "--stock-code",
+            "000001",
+            "--start",
+            "2024-01-01",
+            "--end",
+            "2024-01-31",
+            "--demo",
+        ],
+        cwd=ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0
+    assert "import-news stock_code=000001 inserted=2" in result.stdout
+
+    connection = sqlite3.connect(db_path)
+    try:
+        rows = connection.execute("select count(*) from news_raw").fetchone()
+        assert rows[0] == 2
+    finally:
+        connection.close()
