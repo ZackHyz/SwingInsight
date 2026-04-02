@@ -2,7 +2,7 @@ PYTHON ?= python3
 VENV ?= .venv
 PIP := $(VENV)/bin/pip
 PYTEST := $(VENV)/bin/pytest
-DEMO_DATABASE_URL ?= sqlite+pysqlite:////tmp/swinginsight-demo.db
+DEMO_DATABASE_URL ?= sqlite+pysqlite:////tmp/swinginsight-live.db
 
 .PHONY: api-venv api-test web-install web-test demo test
 

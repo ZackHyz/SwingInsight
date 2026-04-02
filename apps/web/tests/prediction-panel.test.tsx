@@ -22,11 +22,29 @@ function buildData(): StockResearchData {
     ],
     auto_turning_points: [],
     final_turning_points: [],
-    trade_markers: [],
+    trade_markers: [
+      {
+        trade_date: "2024-01-03",
+        trade_type: "buy",
+        price: 9.4,
+      },
+    ],
+    news_items: [
+      {
+        news_id: 7,
+        title: "Liquidity support boosts banks",
+        summary: "Positive catalyst near the rebound",
+        source_name: "wire",
+        news_date: "2024-01-03",
+      },
+    ],
     current_state: {
       label: "主升初期",
       summary: "量价共振，延续概率较高",
       probabilities: {
+        up_1d: 0.64,
+        flat_1d: 0.2,
+        down_1d: 0.16,
         up_5d: 0.62,
         flat_5d: 0.23,
         down_5d: 0.15,
@@ -50,6 +68,12 @@ function buildData(): StockResearchData {
           stock_code: "000001",
           score: 0.91,
           pct_change: 22.5,
+          return_1d: 0.012,
+          return_3d: 0.034,
+          return_5d: -0.028,
+          return_10d: 0.086,
+          start_date: "2024-02-01",
+          end_date: "2024-02-20",
         },
       ],
     },
@@ -63,6 +87,7 @@ describe("prediction panel", () => {
     const apiClient: ApiClient = {
       getStockResearch: vi.fn(),
       commitTurningPoints: vi.fn(),
+      getSegmentChartWindow: vi.fn(),
       getSegmentDetail: vi.fn(),
       getSegmentLibrary: vi.fn(),
       getPrediction: vi.fn(),
@@ -82,8 +107,24 @@ describe("prediction panel", () => {
     const items = scoped.getAllByRole("listitem");
 
     expect(scoped.getByText("当前状态: 主升初期")).toBeTruthy();
-    expect(scoped.getByText("相似历史样本")).toBeTruthy();
-    expect(items.at(-1)?.textContent).toContain("000001 0.91 22.50");
-    expect(scoped.getByText("up_10d 58.0%")).toBeTruthy();
+    expect(scoped.getByText("同股优先相似样本")).toBeTruthy();
+    expect(scoped.getByText(/会优先展示当前股票历史上最接近的波段样本/)).toBeTruthy();
+    expect(items.at(-1)?.textContent).toContain("样本股票 000001");
+    expect(items.at(-1)?.textContent).toContain("时间段 2024-02-01 至 2024-02-20");
+    expect(items.at(-1)?.textContent).toContain("相似度 91.0%");
+    expect(items.at(-1)?.textContent).toContain("样本区间涨跌幅 +22.50%");
+    expect(items.at(-1)?.textContent).toContain("样本后续1日涨跌幅 +1.20%");
+    expect(items.at(-1)?.textContent).toContain("样本后续3日涨跌幅 +3.40%");
+    expect(items.at(-1)?.textContent).toContain("样本后续5日涨跌幅 -2.80%");
+    expect(items.at(-1)?.textContent).toContain("样本后续10日涨跌幅 +8.60%");
+    expect(scoped.getByText("次日上涨 64.0%")).toBeTruthy();
+    expect(scoped.getByText("次日震荡 20.0%")).toBeTruthy();
+    expect(scoped.getByText("10日上涨 58.0%")).toBeTruthy();
+    expect(scoped.getByText("5日震荡 23.0%")).toBeTruthy();
+    expect(scoped.getByText("量比(5日) 1.4")).toBeTruthy();
+    expect(scoped.getByText("正向新闻占比 0.75")).toBeTruthy();
+    expect(scoped.getByText("回撤风险: 低")).toBeTruthy();
+    expect(screen.getByText("历史买卖点占位: 1")).toBeTruthy();
+    expect(screen.getByText("Liquidity support boosts banks")).toBeTruthy();
   });
 });

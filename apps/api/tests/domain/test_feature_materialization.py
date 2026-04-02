@@ -173,6 +173,10 @@ def test_materializer_persists_technical_and_news_features() -> None:
 
     names = {row.feature_name for row in rows}
     assert "pct_change" in names
+    assert "avg_volume_5d" in names
+    assert "avg_volume_10d" in names
+    assert "avg_turnover_rate_5d" in names
+    assert "avg_turnover_rate_10d" in names
     assert "news_count_before_trough_5d" in names
     assert "duplicate_news_ratio" in names
 

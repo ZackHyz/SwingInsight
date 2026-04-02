@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 
 import { KlineChart } from "./kline-chart";
 import { TradeMarkerLayer } from "./trade-marker-layer";
-import type { ApiClient, PriceRow, StockPoint, StockResearchData } from "../lib/api";
+import type { ApiClient, PriceRow, StockPoint, StockResearchData, TurningPointCommitResponse } from "../lib/api";
 
 type PendingAction = "peak" | "trough" | null;
 
@@ -12,6 +12,7 @@ type TurningPointEditorProps = {
   stockCode: string;
   initialData: StockResearchData;
   apiClient: ApiClient;
+  onCommitSuccess?: (response: TurningPointCommitResponse) => void;
 };
 
 function clonePoint(point: StockPoint): StockPoint {
@@ -28,7 +29,11 @@ function getPointKey(point: StockPoint, index: number): string {
   return `${point.point_date}|${point.point_type}|${index}`;
 }
 
-export function TurningPointEditor({ stockCode, initialData, apiClient }: TurningPointEditorProps) {
+function getSelectedPointPrice(row: PriceRow, pointType: "peak" | "trough"): number {
+  return pointType === "peak" ? row.high_price : row.low_price;
+}
+
+export function TurningPointEditor({ stockCode, initialData, apiClient, onCommitSuccess }: TurningPointEditorProps) {
   const [pendingAction, setPendingAction] = useState<PendingAction>(null);
   const [draftFinalPoints, setDraftFinalPoints] = useState<StockPoint[]>(() => initialData.final_turning_points.map(clonePoint));
   const [operations, setOperations] = useState<
@@ -36,6 +41,7 @@ export function TurningPointEditor({ stockCode, initialData, apiClient }: Turnin
   >([]);
   const [selectedPointKey, setSelectedPointKey] = useState<string | null>(null);
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "success" | "error">("idle");
+  const [rebuildMessage, setRebuildMessage] = useState<string | null>(null);
 
   const sortedDraftPoints = useMemo(
     () =>
@@ -59,38 +65,43 @@ export function TurningPointEditor({ stockCode, initialData, apiClient }: Turnin
           if (pointKey !== selectedPointKey) {
             return point;
           }
+          const pointPrice = getSelectedPointPrice(row, pendingAction);
           return {
             ...point,
             point_date: row.trade_date,
             point_type: pendingAction,
-            point_price: row.close_price,
+            point_price: pointPrice,
             source_type: "manual",
           };
         })
       );
       const [pointDate, pointType] = selectedPointKey.split("|");
+      const pointPrice = getSelectedPointPrice(row, pendingAction);
       setOperations((current) => [
         ...current,
         {
           operation_type: "move",
           old_value: { point_date: pointDate, point_type: pointType },
-          new_value: { point_date: row.trade_date, point_type: pendingAction, point_price: row.close_price },
+          new_value: { point_date: row.trade_date, point_type: pendingAction, point_price: pointPrice },
         },
       ]);
       setSelectedPointKey(null);
       setPendingAction(null);
+      setRebuildMessage(null);
       setSaveStatus("idle");
       return;
     }
+    const pointPrice = getSelectedPointPrice(row, pendingAction);
     const newPoint: StockPoint = {
       point_date: row.trade_date,
       point_type: pendingAction,
-      point_price: row.close_price,
+      point_price: pointPrice,
       source_type: "manual",
     };
     setDraftFinalPoints((current) => [...current, newPoint]);
     setOperations((current) => [...current, { operation_type: "add", old_value: null, new_value: newPoint }]);
     setPendingAction(null);
+    setRebuildMessage(null);
     setSaveStatus("idle");
   }
 
@@ -107,6 +118,10 @@ export function TurningPointEditor({ stockCode, initialData, apiClient }: Turnin
       });
       setDraftFinalPoints(response.final_turning_points.map(clonePoint));
       setOperations([]);
+      setRebuildMessage(
+        `重算完成: ${response.rebuild_summary.segments} 个波段 / ${response.rebuild_summary.features} 个特征 / ${response.rebuild_summary.predictions} 条预测`
+      );
+      onCommitSuccess?.(response);
       setSaveStatus("success");
     } catch {
       setSaveStatus("error");
@@ -118,6 +133,7 @@ export function TurningPointEditor({ stockCode, initialData, apiClient }: Turnin
     setOperations([]);
     setPendingAction(null);
     setSelectedPointKey(null);
+    setRebuildMessage(null);
     setSaveStatus("idle");
   }
 
@@ -141,6 +157,7 @@ export function TurningPointEditor({ stockCode, initialData, apiClient }: Turnin
       },
     ]);
     setSelectedPointKey(null);
+    setRebuildMessage(null);
     setSaveStatus("idle");
   }
 
@@ -190,6 +207,7 @@ export function TurningPointEditor({ stockCode, initialData, apiClient }: Turnin
 
       <TradeMarkerLayer count={initialData.trade_markers.length} />
 
+      {rebuildMessage === null ? null : <p>{rebuildMessage}</p>}
       {saveStatus === "success" ? <p>保存成功</p> : null}
       {saveStatus === "error" ? <p>保存失败</p> : null}
     </section>

@@ -32,4 +32,5 @@ class StockResearchResponse(BaseModel):
     auto_turning_points: list[dict[str, Any]]
     final_turning_points: list[dict[str, Any]]
     trade_markers: list[dict[str, Any]]
+    news_items: list[dict[str, Any]]
     current_state: dict[str, Any]

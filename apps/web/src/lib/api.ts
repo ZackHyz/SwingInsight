@@ -1,3 +1,5 @@
+const API_BASE = (import.meta as { env?: { VITE_API_BASE?: string } }).env?.VITE_API_BASE ?? "/api";
+
 export type StockPoint = {
   id?: number;
   point_date: string;
@@ -12,6 +14,40 @@ export type PriceRow = {
   high_price: number;
   low_price: number;
   close_price: number;
+  volume?: number | null;
+};
+
+export type SimilarCase = {
+  segment_id: number;
+  stock_code: string;
+  score: number;
+  price_score?: number;
+  volume_score?: number;
+  turnover_score?: number;
+  pattern_score?: number;
+  pct_change: number | null;
+  return_1d?: number | null;
+  return_3d?: number | null;
+  return_5d?: number | null;
+  return_10d?: number | null;
+  start_date?: string;
+  end_date?: string;
+};
+
+export type SegmentChartWindowData = {
+  segment: {
+    id: number;
+    stock_code: string;
+    start_date: string;
+    end_date: string;
+  };
+  highlight_range: {
+    start_date: string;
+    end_date: string;
+  };
+  prices: PriceRow[];
+  auto_turning_points: StockPoint[];
+  final_turning_points: StockPoint[];
 };
 
 export type StockResearchData = {
@@ -25,19 +61,29 @@ export type StockResearchData = {
   prices: PriceRow[];
   auto_turning_points: StockPoint[];
   final_turning_points: StockPoint[];
-  trade_markers: Array<Record<string, unknown>>;
+  trade_markers: Array<{
+    id?: number;
+    trade_date: string;
+    trade_type: string;
+    price: number;
+    quantity?: number;
+    strategy_tag?: string | null;
+    note?: string | null;
+  }>;
+  news_items: Array<{
+    news_id: number;
+    title: string;
+    summary: string | null;
+    source_name: string | null;
+    news_date: string | null;
+  }>;
   current_state: {
     label: string;
     summary: string;
     probabilities?: Record<string, number>;
     key_features?: Record<string, number>;
     risk_flags?: Record<string, string>;
-    similar_cases?: Array<{
-      segment_id: number;
-      stock_code: string;
-      score: number;
-      pct_change: number | null;
-    }>;
+    similar_cases?: SimilarCase[];
   };
 };
 
@@ -56,16 +102,21 @@ export type TurningPointCommitPayload = {
 };
 
 export type TurningPointCommitResponse = {
+  auto_turning_points: StockPoint[];
   final_turning_points: StockPoint[];
   rebuild_summary: {
     segments: number;
+    features: number;
+    predictions: number;
     version_code: string;
   };
+  current_state: StockResearchData["current_state"] | null;
 };
 
 export type ApiClient = {
   getStockResearch: (stockCode: string) => Promise<StockResearchData>;
   commitTurningPoints: (stockCode: string, payload: TurningPointCommitPayload) => Promise<TurningPointCommitResponse>;
+  getSegmentChartWindow: (segmentId: string) => Promise<SegmentChartWindowData>;
   getSegmentDetail: (segmentId: string) => Promise<SegmentDetailData>;
   getSegmentLibrary: () => Promise<SegmentLibraryData>;
   getPrediction: (stockCode: string, predictDate: string) => Promise<PredictionData>;
@@ -121,24 +172,19 @@ export type PredictionData = {
   probabilities: Record<string, number>;
   key_features: Record<string, number>;
   risk_flags: Record<string, string>;
-  similar_cases: Array<{
-    segment_id: number;
-    stock_code: string;
-    score: number;
-    pct_change: number | null;
-  }>;
+  similar_cases: SimilarCase[];
 };
 
 export const apiClient: ApiClient = {
   async getStockResearch(stockCode) {
-    const response = await fetch(`http://127.0.0.1:8000/stocks/${stockCode}`);
+    const response = await fetch(`${API_BASE}/stocks/${stockCode}`);
     if (!response.ok) {
       throw new Error(`Failed to load stock research: ${response.status}`);
     }
     return (await response.json()) as StockResearchData;
   },
   async commitTurningPoints(stockCode, payload) {
-    const response = await fetch(`http://127.0.0.1:8000/stocks/${stockCode}/turning-points/commit`, {
+    const response = await fetch(`${API_BASE}/stocks/${stockCode}/turning-points/commit`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -150,22 +196,29 @@ export const apiClient: ApiClient = {
     }
     return (await response.json()) as TurningPointCommitResponse;
   },
+  async getSegmentChartWindow(segmentId) {
+    const response = await fetch(`${API_BASE}/segments/${segmentId}/chart`);
+    if (!response.ok) {
+      throw new Error(`Failed to load segment chart window: ${response.status}`);
+    }
+    return (await response.json()) as SegmentChartWindowData;
+  },
   async getSegmentDetail(segmentId) {
-    const response = await fetch(`http://127.0.0.1:8000/segments/${segmentId}`);
+    const response = await fetch(`${API_BASE}/segments/${segmentId}`);
     if (!response.ok) {
       throw new Error(`Failed to load segment detail: ${response.status}`);
     }
     return (await response.json()) as SegmentDetailData;
   },
   async getSegmentLibrary() {
-    const response = await fetch("http://127.0.0.1:8000/library");
+    const response = await fetch(`${API_BASE}/library`);
     if (!response.ok) {
       throw new Error(`Failed to load segment library: ${response.status}`);
     }
     return (await response.json()) as SegmentLibraryData;
   },
   async getPrediction(stockCode, predictDate) {
-    const response = await fetch(`http://127.0.0.1:8000/predictions/${stockCode}?predict_date=${predictDate}`);
+    const response = await fetch(`${API_BASE}/predictions/${stockCode}?predict_date=${predictDate}`);
     if (!response.ok) {
       throw new Error(`Failed to load prediction: ${response.status}`);
     }

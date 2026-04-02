@@ -12,6 +12,8 @@ from swinginsight.db.models.turning_point import TurningPoint
 from swinginsight.domain.segments.builder import build_segments
 from swinginsight.domain.turning_points.zigzag import DetectedTurningPoint
 
+MANUAL_VERSION_CODE = "manual:latest"
+
 
 @dataclass(slots=True, frozen=True)
 class SegmentGenerationResult:
@@ -23,15 +25,7 @@ class SegmentGenerationService:
         self.session = session
 
     def rebuild_segments(self, *, stock_code: str, version_code: str) -> SegmentGenerationResult:
-        points = self.session.scalars(
-            select(TurningPoint)
-            .where(
-                TurningPoint.stock_code == stock_code,
-                TurningPoint.is_final.is_(True),
-                TurningPoint.version_code == version_code,
-            )
-            .order_by(TurningPoint.point_date.asc(), TurningPoint.id.asc())
-        ).all()
+        points = self._load_points(stock_code=stock_code, version_code=version_code)
 
         detected_points = [
             DetectedTurningPoint(
@@ -120,3 +114,12 @@ class SegmentGenerationService:
         )
         self.session.flush()
         return SegmentGenerationResult(inserted=len(built_segments))
+
+    def _load_points(self, *, stock_code: str, version_code: str) -> list[TurningPoint]:
+        statement = select(TurningPoint).where(
+            TurningPoint.stock_code == stock_code,
+            TurningPoint.is_final.is_(True),
+        )
+        if version_code != MANUAL_VERSION_CODE:
+            statement = statement.where(TurningPoint.version_code == version_code)
+        return self.session.scalars(statement.order_by(TurningPoint.point_date.asc(), TurningPoint.id.asc())).all()

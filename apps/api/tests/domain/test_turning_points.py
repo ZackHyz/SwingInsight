@@ -38,6 +38,27 @@ def test_zigzag_detector_marks_major_turning_points() -> None:
     ]
 
 
+def test_zigzag_detector_uses_kline_highs_and_lows_for_turning_points() -> None:
+    from swinginsight.domain.turning_points.zigzag import ZigZagDetector
+
+    detector = ZigZagDetector(reversal_pct=0.08)
+    price_series = [
+        {"trade_date": date(2024, 1, 2), "close_price": 10.0, "high_price": 10.2, "low_price": 9.8},
+        {"trade_date": date(2024, 1, 3), "close_price": 9.95, "high_price": 11.0, "low_price": 9.9},
+        {"trade_date": date(2024, 1, 4), "close_price": 9.96, "high_price": 10.0, "low_price": 9.0},
+        {"trade_date": date(2024, 1, 5), "close_price": 9.97, "high_price": 10.9, "low_price": 9.95},
+        {"trade_date": date(2024, 1, 8), "close_price": 10.0, "high_price": 10.1, "low_price": 9.7},
+    ]
+
+    points = detector.detect(price_series)
+
+    assert [(point.point_date, point.point_type, point.point_price) for point in points[:3]] == [
+        (date(2024, 1, 3), "peak", 11.0),
+        (date(2024, 1, 4), "trough", 9.0),
+        (date(2024, 1, 5), "peak", 10.9),
+    ]
+
+
 def test_volatility_filter_drops_small_reversals() -> None:
     from swinginsight.domain.turning_points.filters import filter_by_min_separation_pct
     from swinginsight.domain.turning_points.zigzag import DetectedTurningPoint
@@ -51,3 +72,48 @@ def test_volatility_filter_drops_small_reversals() -> None:
     filtered = filter_by_min_separation_pct(points, min_separation_pct=0.05)
 
     assert [point.point_type for point in filtered] == ["trough", "peak"]
+
+
+def test_calibration_learns_thresholds_from_manual_points() -> None:
+    from swinginsight.domain.turning_points.calibration import calibrate_turning_point_params
+    from swinginsight.domain.turning_points.filters import filter_by_min_separation_pct
+    from swinginsight.domain.turning_points.zigzag import DetectedTurningPoint, ZigZagDetector
+
+    price_series = [
+        {"trade_date": date(2024, 2, 1), "close_price": 10.0},
+        {"trade_date": date(2024, 2, 2), "close_price": 9.7},
+        {"trade_date": date(2024, 2, 5), "close_price": 9.4},
+        {"trade_date": date(2024, 2, 6), "close_price": 9.8},
+        {"trade_date": date(2024, 2, 7), "close_price": 9.3},
+        {"trade_date": date(2024, 2, 8), "close_price": 9.6},
+        {"trade_date": date(2024, 2, 9), "close_price": 9.1},
+        {"trade_date": date(2024, 2, 19), "close_price": 9.7},
+    ]
+    manual_points = [
+        DetectedTurningPoint(point_date=date(2024, 2, 5), point_type="trough", point_price=9.4),
+        DetectedTurningPoint(point_date=date(2024, 2, 6), point_type="peak", point_price=9.8),
+        DetectedTurningPoint(point_date=date(2024, 2, 7), point_type="trough", point_price=9.3),
+        DetectedTurningPoint(point_date=date(2024, 2, 8), point_type="peak", point_price=9.6),
+        DetectedTurningPoint(point_date=date(2024, 2, 9), point_type="trough", point_price=9.1),
+        DetectedTurningPoint(point_date=date(2024, 2, 19), point_type="peak", point_price=9.7),
+    ]
+
+    reversal_pct, min_separation_pct = calibrate_turning_point_params(
+        price_series=price_series,
+        manual_points=manual_points,
+        default_reversal_pct=0.08,
+        default_min_separation_pct=0.05,
+    )
+
+    assert reversal_pct < 0.08
+
+    detected = filter_by_min_separation_pct(ZigZagDetector(reversal_pct=reversal_pct).detect(price_series), min_separation_pct)
+
+    assert [(point.point_date, point.point_type) for point in detected] == [
+        (date(2024, 2, 5), "trough"),
+        (date(2024, 2, 6), "peak"),
+        (date(2024, 2, 7), "trough"),
+        (date(2024, 2, 8), "peak"),
+        (date(2024, 2, 9), "trough"),
+        (date(2024, 2, 19), "peak"),
+    ]

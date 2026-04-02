@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
+import math
 
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
@@ -13,9 +14,12 @@ from swinginsight.db.models.stock import StockBasic
 from swinginsight.db.models.turning_point import PointRevisionLog, TurningPoint
 
 
-DEMO_STOCK_CODE = "000001"
-DEMO_PREDICT_DATE = date(2024, 6, 28)
+DEMO_STOCK_CODE = "600157"
+DEMO_STOCK_NAME = "Demo 600157"
+DEMO_PREDICT_DATE = date(2026, 3, 31)
+DEMO_START_DATE = date(2025, 4, 1)
 DEFAULT_DEMO_DATABASE_URL = "sqlite+pysqlite:////tmp/swinginsight-demo.db"
+LEGACY_DEMO_STOCK_CODES = ("000001", DEMO_STOCK_CODE)
 
 
 def seed_demo_research_data(session: Session) -> dict[str, int]:
@@ -24,64 +28,61 @@ def seed_demo_research_data(session: Session) -> dict[str, int]:
     session.add(
         StockBasic(
             stock_code=DEMO_STOCK_CODE,
-            stock_name="Ping An Bank",
+            stock_name=DEMO_STOCK_NAME,
             market="A",
-            industry="Bank",
-            concept_tags=["finance", "bluechip"],
+            industry="Energy",
+            concept_tags=["coal", "power", "demo"],
         )
     )
 
-    prices = [
-        (date(2024, 6, 17), 10.1, 10.3, 9.9, 10.0),
-        (date(2024, 6, 18), 9.9, 10.0, 9.4, 9.6),
-        (date(2024, 6, 19), 9.6, 10.2, 9.5, 10.1),
-        (date(2024, 6, 20), 10.2, 10.9, 10.1, 10.8),
-        (date(2024, 6, 21), 10.8, 11.4, 10.7, 11.3),
-        (date(2024, 6, 24), 11.2, 12.2, 11.1, 12.0),
-        (date(2024, 6, 25), 12.0, 12.1, 11.5, 11.7),
-        (date(2024, 6, 26), 11.7, 11.8, 11.2, 11.4),
-        (date(2024, 6, 27), 11.4, 11.9, 11.3, 11.8),
-        (date(2024, 6, 28), 11.8, 12.3, 11.7, 12.1),
-    ]
-    for trade_date, open_price, high_price, low_price, close_price in prices:
+    prices = _build_demo_prices()
+    for row in prices:
         session.add(
             DailyPrice(
                 stock_code=DEMO_STOCK_CODE,
-                trade_date=trade_date,
-                open_price=open_price,
-                high_price=high_price,
-                low_price=low_price,
-                close_price=close_price,
+                trade_date=row["trade_date"],
+                open_price=row["open_price"],
+                high_price=row["high_price"],
+                low_price=row["low_price"],
+                close_price=row["close_price"],
                 adj_type="qfq",
                 data_source="demo",
             )
         )
 
+    point_indexes = {
+        "hist_trough": 34,
+        "hist_peak": 86,
+        "current_trough": 184,
+        "current_peak": len(prices) - 9,
+    }
+    point_rows = {name: prices[index] for name, index in point_indexes.items()}
+
     session.add_all(
         [
             TurningPoint(
                 stock_code=DEMO_STOCK_CODE,
-                point_date=date(2024, 6, 18),
+                point_date=point_rows["current_trough"]["trade_date"],
                 point_type="trough",
-                point_price=9.6,
+                point_price=point_rows["current_trough"]["low_price"],
                 source_type="system",
                 version_code="zigzag:demo",
                 is_final=False,
             ),
             TurningPoint(
                 stock_code=DEMO_STOCK_CODE,
-                point_date=date(2024, 6, 24),
+                point_date=point_rows["current_peak"]["trade_date"],
                 point_type="peak",
-                point_price=12.0,
+                point_price=point_rows["current_peak"]["high_price"],
                 source_type="system",
                 version_code="zigzag:demo",
                 is_final=False,
             ),
             TurningPoint(
                 stock_code=DEMO_STOCK_CODE,
-                point_date=date(2024, 6, 18),
+                point_date=point_rows["current_trough"]["trade_date"],
                 point_type="trough",
-                point_price=9.6,
+                point_price=point_rows["current_trough"]["low_price"],
                 source_type="manual",
                 version_code="manual:latest",
                 is_final=True,
@@ -89,9 +90,9 @@ def seed_demo_research_data(session: Session) -> dict[str, int]:
             ),
             TurningPoint(
                 stock_code=DEMO_STOCK_CODE,
-                point_date=date(2024, 6, 24),
+                point_date=point_rows["current_peak"]["trade_date"],
                 point_type="peak",
-                point_price=12.0,
+                point_price=point_rows["current_peak"]["high_price"],
                 source_type="manual",
                 version_code="manual:latest",
                 is_final=True,
@@ -112,57 +113,57 @@ def seed_demo_research_data(session: Session) -> dict[str, int]:
 
     segments = [
         SwingSegment(
-            segment_uid="000001:2024-06-18:2024-06-24:manual:latest",
+            segment_uid=f"{DEMO_STOCK_CODE}:{point_rows['current_trough']['trade_date']:%Y-%m-%d}:{point_rows['current_peak']['trade_date']:%Y-%m-%d}:manual:latest",
             stock_code=DEMO_STOCK_CODE,
-            start_date=date(2024, 6, 18),
-            end_date=date(2024, 6, 24),
+            start_date=point_rows["current_trough"]["trade_date"],
+            end_date=point_rows["current_peak"]["trade_date"],
             start_point_type="trough",
             end_point_type="peak",
-            start_price=9.6,
-            end_price=12.0,
-            pct_change=25.0,
-            duration_days=6,
-            max_drawdown_pct=-2.1,
-            max_upside_pct=26.2,
-            avg_daily_change_pct=3.6,
+            start_price=point_rows["current_trough"]["low_price"],
+            end_price=point_rows["current_peak"]["high_price"],
+            pct_change=21.8421,
+            duration_days=(point_rows["current_peak"]["trade_date"] - point_rows["current_trough"]["trade_date"]).days,
+            max_drawdown_pct=-4.1,
+            max_upside_pct=24.3,
+            avg_daily_change_pct=1.18,
             segment_type="up_swing",
             trend_direction="up",
             source_version="manual:latest",
             is_final=True,
         ),
         SwingSegment(
-            segment_uid="000001:2024-04-02:2024-04-18:manual:latest",
+            segment_uid=f"{DEMO_STOCK_CODE}:{point_rows['hist_trough']['trade_date']:%Y-%m-%d}:{point_rows['hist_peak']['trade_date']:%Y-%m-%d}:manual:latest",
             stock_code=DEMO_STOCK_CODE,
-            start_date=date(2024, 4, 2),
-            end_date=date(2024, 4, 18),
+            start_date=point_rows["hist_trough"]["trade_date"],
+            end_date=point_rows["hist_peak"]["trade_date"],
             start_point_type="trough",
             end_point_type="peak",
-            start_price=8.1,
-            end_price=10.0,
-            pct_change=23.4568,
-            duration_days=16,
-            max_drawdown_pct=-4.2,
-            max_upside_pct=24.0,
-            avg_daily_change_pct=1.46,
+            start_price=point_rows["hist_trough"]["low_price"],
+            end_price=point_rows["hist_peak"]["high_price"],
+            pct_change=18.425,
+            duration_days=(point_rows["hist_peak"]["trade_date"] - point_rows["hist_trough"]["trade_date"]).days,
+            max_drawdown_pct=-5.3,
+            max_upside_pct=20.7,
+            avg_daily_change_pct=0.74,
             segment_type="up_swing",
             trend_direction="up",
             source_version="manual:latest",
             is_final=True,
         ),
         SwingSegment(
-            segment_uid="000001:2024-02-06:2024-02-19:manual:latest",
+            segment_uid=f"{DEMO_STOCK_CODE}:2025-11-03:2025-12-08:manual:latest",
             stock_code=DEMO_STOCK_CODE,
-            start_date=date(2024, 2, 6),
-            end_date=date(2024, 2, 19),
+            start_date=date(2025, 11, 3),
+            end_date=date(2025, 12, 8),
             start_point_type="peak",
             end_point_type="trough",
-            start_price=11.2,
-            end_price=10.0,
-            pct_change=-10.7143,
-            duration_days=13,
-            max_drawdown_pct=-12.4,
-            max_upside_pct=1.3,
-            avg_daily_change_pct=-0.82,
+            start_price=6.12,
+            end_price=5.11,
+            pct_change=-16.5033,
+            duration_days=35,
+            max_drawdown_pct=-18.8,
+            max_upside_pct=1.5,
+            avg_daily_change_pct=-0.47,
             segment_type="down_swing",
             trend_direction="down",
             source_version="manual:latest",
@@ -174,34 +175,34 @@ def seed_demo_research_data(session: Session) -> dict[str, int]:
 
     feature_rows = {
         segments[0].id: {
-            "pct_change": 25.0,
-            "duration_days": 6.0,
-            "max_drawdown_pct": -2.1,
-            "volume_ratio_5d": 1.6,
+            "pct_change": 21.8421,
+            "duration_days": float(segments[0].duration_days),
+            "max_drawdown_pct": -4.1,
+            "volume_ratio_5d": 1.52,
             "ma5_above_ma20": 1.0,
             "macd_cross_flag": 1.0,
-            "positive_news_ratio": 0.75,
+            "positive_news_ratio": 0.7,
             "duplicate_news_ratio": 0.0,
         },
         segments[1].id: {
-            "pct_change": 23.4568,
-            "duration_days": 16.0,
-            "max_drawdown_pct": -4.2,
-            "volume_ratio_5d": 1.45,
+            "pct_change": 18.425,
+            "duration_days": float(segments[1].duration_days),
+            "max_drawdown_pct": -5.3,
+            "volume_ratio_5d": 1.34,
             "ma5_above_ma20": 1.0,
             "macd_cross_flag": 1.0,
-            "positive_news_ratio": 0.8,
+            "positive_news_ratio": 0.65,
             "duplicate_news_ratio": 0.1,
         },
         segments[2].id: {
-            "pct_change": -10.7143,
-            "duration_days": 13.0,
-            "max_drawdown_pct": -12.4,
-            "volume_ratio_5d": 0.82,
+            "pct_change": -16.5033,
+            "duration_days": float(segments[2].duration_days),
+            "max_drawdown_pct": -18.8,
+            "volume_ratio_5d": 0.78,
             "ma5_above_ma20": 0.0,
             "macd_cross_flag": 0.0,
-            "positive_news_ratio": 0.25,
-            "duplicate_news_ratio": 0.25,
+            "positive_news_ratio": 0.3,
+            "duplicate_news_ratio": 0.2,
         },
     }
     for segment_id, features in feature_rows.items():
@@ -222,7 +223,7 @@ def seed_demo_research_data(session: Session) -> dict[str, int]:
     for segment_id, label_name, score in (
         (segments[0].id, "放量突破型", 0.9),
         (segments[0].id, "消息刺激型", 0.8),
-        (segments[1].id, "放量突破型", 0.9),
+        (segments[1].id, "放量突破型", 0.85),
         (segments[2].id, "高位见顶型", 0.8),
     ):
         session.add(
@@ -238,15 +239,19 @@ def seed_demo_research_data(session: Session) -> dict[str, int]:
             )
         )
 
+    news_dates = [
+        point_rows["current_trough"]["trade_date"] - timedelta(days=2),
+        point_rows["current_peak"]["trade_date"] - timedelta(days=1),
+    ]
     session.add_all(
         [
             NewsRaw(
                 stock_code=DEMO_STOCK_CODE,
-                title="Credit growth supports banking names",
-                summary="Macro data improves into the trough.",
+                title="Thermal coal benchmark stabilises into spring demand",
+                summary="Sector sentiment improves ahead of the rebound leg.",
                 content="Demo news item",
-                publish_time=datetime(2024, 6, 17, 9, 30),
-                news_date=date(2024, 6, 17),
+                publish_time=datetime.combine(news_dates[0], datetime.min.time()).replace(hour=9, minute=30),
+                news_date=news_dates[0],
                 source_name="demo-wire",
                 source_type="demo",
                 sentiment="positive",
@@ -256,15 +261,15 @@ def seed_demo_research_data(session: Session) -> dict[str, int]:
             ),
             NewsRaw(
                 stock_code=DEMO_STOCK_CODE,
-                title="Broker notes highlight margin recovery",
-                summary="Analysts call out improving trading activity.",
+                title="Power dispatch update supports utility-linked names",
+                summary="Follow-through catalyst during the latest advance.",
                 content="Demo news item",
-                publish_time=datetime(2024, 6, 21, 10, 0),
-                news_date=date(2024, 6, 21),
+                publish_time=datetime.combine(news_dates[1], datetime.min.time()).replace(hour=10, minute=0),
+                news_date=news_dates[1],
                 source_name="demo-wire",
                 source_type="demo",
                 sentiment="positive",
-                news_type="broker",
+                news_type="sector",
                 is_duplicate=False,
                 data_source="demo",
             ),
@@ -283,8 +288,8 @@ def seed_demo_research_data(session: Session) -> dict[str, int]:
                 stock_code=DEMO_STOCK_CODE,
                 relation_type="before_trough",
                 window_type="point_window",
-                anchor_date=date(2024, 6, 18),
-                distance_days=-1,
+                anchor_date=point_rows["current_trough"]["trade_date"],
+                distance_days=(news_rows[0].news_date - point_rows["current_trough"]["trade_date"]).days,
                 weight_score=1.0,
             ),
             SegmentNewsMap(
@@ -293,26 +298,40 @@ def seed_demo_research_data(session: Session) -> dict[str, int]:
                 stock_code=DEMO_STOCK_CODE,
                 relation_type="inside_segment",
                 window_type="segment_body",
-                anchor_date=date(2024, 6, 18),
-                distance_days=3,
+                anchor_date=point_rows["current_trough"]["trade_date"],
+                distance_days=(news_rows[1].news_date - point_rows["current_trough"]["trade_date"]).days,
                 weight_score=1.0,
             ),
         ]
     )
 
-    session.add(
-        TradeRecord(
-            stock_code=DEMO_STOCK_CODE,
-            trade_date=date(2024, 6, 20),
-            trade_type="buy",
-            price=10.8,
-            quantity=1000,
-            amount=10800,
-            strategy_tag="demo",
-            order_group_id="demo-buy-1",
-            note="Seeded demo buy marker",
-            source="demo",
-        )
+    session.add_all(
+        [
+            TradeRecord(
+                stock_code=DEMO_STOCK_CODE,
+                trade_date=point_rows["current_trough"]["trade_date"] + timedelta(days=5),
+                trade_type="buy",
+                price=round(point_rows["current_trough"]["close_price"] * 1.03, 4),
+                quantity=3000,
+                amount=round(point_rows["current_trough"]["close_price"] * 1.03 * 3000, 2),
+                strategy_tag="demo",
+                order_group_id="demo-buy-1",
+                note="Seeded momentum entry",
+                source="demo",
+            ),
+            TradeRecord(
+                stock_code=DEMO_STOCK_CODE,
+                trade_date=point_rows["current_peak"]["trade_date"] - timedelta(days=2),
+                trade_type="sell",
+                price=round(point_rows["current_peak"]["close_price"] * 0.98, 4),
+                quantity=1500,
+                amount=round(point_rows["current_peak"]["close_price"] * 0.98 * 1500, 2),
+                strategy_tag="demo",
+                order_group_id="demo-sell-1",
+                note="Seeded scale-out",
+                source="demo",
+            ),
+        ]
     )
 
     session.add(
@@ -320,38 +339,38 @@ def seed_demo_research_data(session: Session) -> dict[str, int]:
             stock_code=DEMO_STOCK_CODE,
             predict_date=DEMO_PREDICT_DATE,
             current_state="主升初期",
-            up_prob_5d=0.62,
-            flat_prob_5d=0.21,
+            up_prob_5d=0.61,
+            flat_prob_5d=0.22,
             down_prob_5d=0.17,
-            up_prob_10d=0.58,
-            flat_prob_10d=0.22,
+            up_prob_10d=0.57,
+            flat_prob_10d=0.23,
             down_prob_10d=0.20,
-            up_prob_20d=0.49,
-            flat_prob_20d=0.25,
+            up_prob_20d=0.48,
+            flat_prob_20d=0.26,
             down_prob_20d=0.26,
             similarity_topn_json=[
                 {
                     "segment_id": segments[1].id,
                     "stock_code": DEMO_STOCK_CODE,
-                    "score": 0.93,
-                    "pct_change": 23.4568,
+                    "score": 0.91,
+                    "pct_change": 18.425,
                 },
                 {
                     "segment_id": segments[2].id,
                     "stock_code": DEMO_STOCK_CODE,
-                    "score": 0.21,
-                    "pct_change": -10.7143,
+                    "score": 0.24,
+                    "pct_change": -16.5033,
                 },
             ],
             key_features_json={
-                "pct_change": 25.0,
-                "volume_ratio_5d": 1.6,
-                "positive_news_ratio": 0.75,
-                "max_drawdown_pct": -2.1,
+                "pct_change": 21.8421,
+                "volume_ratio_5d": 1.52,
+                "positive_news_ratio": 0.7,
+                "max_drawdown_pct": -4.1,
             },
             risk_flags_json={"pullback_risk": "low", "news_support": "strong"},
             model_version="prediction:v1",
-            summary="主升初期，10日上行概率 0.58",
+            summary="主升初期，10日上行概率 0.57",
         )
     )
 
@@ -363,15 +382,50 @@ def seed_demo_research_data(session: Session) -> dict[str, int]:
     }
 
 
+def _build_demo_prices() -> list[dict[str, float | date]]:
+    rows: list[dict[str, float | date]] = []
+    current_date = DEMO_START_DATE
+    index = 0
+    previous_close = 4.82
+
+    while current_date <= DEMO_PREDICT_DATE:
+        if current_date.weekday() >= 5:
+            current_date += timedelta(days=1)
+            continue
+
+        seasonal = math.sin(index / 10) * 0.48
+        drift = index * 0.0045
+        correction = -0.35 if 120 <= index <= 145 else 0
+        close_price = round(max(3.85, 4.65 + seasonal + drift + correction), 4)
+        open_price = round(close_price + math.sin(index / 3) * 0.08, 4)
+        high_price = round(max(open_price, close_price) + 0.12 + (index % 5) * 0.015, 4)
+        low_price = round(min(open_price, close_price) - 0.11 - (index % 4) * 0.012, 4)
+        rows.append(
+            {
+                "trade_date": current_date,
+                "open_price": open_price,
+                "high_price": high_price,
+                "low_price": low_price,
+                "close_price": close_price,
+                "pre_close_price": previous_close,
+            }
+        )
+        previous_close = close_price
+        current_date += timedelta(days=1)
+        index += 1
+
+    return rows
+
+
 def _clear_existing_demo_rows(session: Session) -> None:
-    session.execute(delete(PointRevisionLog).where(PointRevisionLog.stock_code == DEMO_STOCK_CODE))
-    session.execute(delete(SegmentNewsMap).where(SegmentNewsMap.stock_code == DEMO_STOCK_CODE))
-    session.execute(delete(SegmentLabel).where(SegmentLabel.stock_code == DEMO_STOCK_CODE))
-    session.execute(delete(SegmentFeature).where(SegmentFeature.stock_code == DEMO_STOCK_CODE))
-    session.execute(delete(PredictionResult).where(PredictionResult.stock_code == DEMO_STOCK_CODE))
-    session.execute(delete(TradeRecord).where(TradeRecord.stock_code == DEMO_STOCK_CODE))
-    session.execute(delete(NewsRaw).where(NewsRaw.stock_code == DEMO_STOCK_CODE))
-    session.execute(delete(SwingSegment).where(SwingSegment.stock_code == DEMO_STOCK_CODE))
-    session.execute(delete(TurningPoint).where(TurningPoint.stock_code == DEMO_STOCK_CODE))
-    session.execute(delete(DailyPrice).where(DailyPrice.stock_code == DEMO_STOCK_CODE))
-    session.execute(delete(StockBasic).where(StockBasic.stock_code == DEMO_STOCK_CODE))
+    session.execute(delete(PointRevisionLog).where(PointRevisionLog.stock_code.in_(LEGACY_DEMO_STOCK_CODES)))
+    session.execute(delete(SegmentNewsMap).where(SegmentNewsMap.stock_code.in_(LEGACY_DEMO_STOCK_CODES)))
+    session.execute(delete(SegmentLabel).where(SegmentLabel.stock_code.in_(LEGACY_DEMO_STOCK_CODES)))
+    session.execute(delete(SegmentFeature).where(SegmentFeature.stock_code.in_(LEGACY_DEMO_STOCK_CODES)))
+    session.execute(delete(PredictionResult).where(PredictionResult.stock_code.in_(LEGACY_DEMO_STOCK_CODES)))
+    session.execute(delete(TradeRecord).where(TradeRecord.stock_code.in_(LEGACY_DEMO_STOCK_CODES)))
+    session.execute(delete(NewsRaw).where(NewsRaw.stock_code.in_(LEGACY_DEMO_STOCK_CODES)))
+    session.execute(delete(SwingSegment).where(SwingSegment.stock_code.in_(LEGACY_DEMO_STOCK_CODES)))
+    session.execute(delete(TurningPoint).where(TurningPoint.stock_code.in_(LEGACY_DEMO_STOCK_CODES)))
+    session.execute(delete(DailyPrice).where(DailyPrice.stock_code.in_(LEGACY_DEMO_STOCK_CODES)))
+    session.execute(delete(StockBasic).where(StockBasic.stock_code.in_(LEGACY_DEMO_STOCK_CODES)))

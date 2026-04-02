@@ -53,6 +53,7 @@ describe("segment detail page", () => {
     const apiClient: ApiClient = {
       getStockResearch: vi.fn(),
       commitTurningPoints: vi.fn(),
+      getSegmentChartWindow: vi.fn(),
       getSegmentDetail: vi.fn(),
       getSegmentLibrary: vi.fn(),
       getPrediction: vi.fn(),

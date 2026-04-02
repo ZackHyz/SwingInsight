@@ -32,12 +32,19 @@ const html = `<!doctype html>
         </ul>
       </aside>
       <section>
+        <h2>相关新闻</h2>
+        <ul>
+          <li><strong>Liquidity support boosts banks</strong> <span>2024-06-21</span></li>
+        </ul>
+      </section>
+      <section>
         <div class="toolbar">
           <button id="mark-trough" type="button">标记波谷</button>
           <button id="save" type="button">保存修正</button>
         </div>
         <div id="kline-canvas" data-testid="kline-canvas">KLine Chart Loaded</div>
         <ul id="points"></ul>
+        <p>历史买卖点占位: 1</p>
         <p id="status"></p>
       </section>
     </main>
@@ -58,7 +65,7 @@ const html = `<!doctype html>
         pendingAction = null;
       });
       document.getElementById("save").addEventListener("click", () => {
-        status.textContent = hasDraftPoint ? "保存成功" : "暂无变更";
+        status.textContent = hasDraftPoint ? "保存成功 重算完成: 1 个波段 / 8 个特征 / 1 条预测" : "暂无变更";
       });
     </script>
   </body>
