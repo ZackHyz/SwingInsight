@@ -12,8 +12,10 @@ from swinginsight.db.base import BIGINT_TYPE, Base, CreatedAtMixin
 class NewsRaw(CreatedAtMixin, Base):
     __tablename__ = "news_raw"
     __table_args__ = (
+        Index("ix_news_raw_news_uid", "news_uid", unique=True),
         Index("ix_news_raw_stock_code", "stock_code"),
         Index("ix_news_raw_publish_time", "publish_time"),
+        Index("ix_news_raw_stock_code_publish_time", "stock_code", "publish_time"),
         Index("ix_news_raw_news_date", "news_date"),
         Index("ix_news_raw_news_type", "news_type"),
         Index("ix_news_raw_duplicate_group", "duplicate_group_id"),
@@ -37,7 +39,39 @@ class NewsRaw(CreatedAtMixin, Base):
     keywords: Mapped[str | None] = mapped_column(Text())
     is_duplicate: Mapped[bool] = mapped_column(Boolean(), nullable=False, default=False)
     duplicate_group_id: Mapped[str | None] = mapped_column(String(64))
+    main_news_id: Mapped[int | None] = mapped_column(BIGINT_TYPE)
+    raw_json: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    fetch_time: Mapped[datetime | None] = mapped_column(DateTime())
+    is_parsed: Mapped[bool] = mapped_column(Boolean(), nullable=False, default=False)
+    parse_status: Mapped[str | None] = mapped_column(String(32), default="pending")
     data_source: Mapped[str | None] = mapped_column(String(32))
+
+
+class NewsProcessed(CreatedAtMixin, Base):
+    __tablename__ = "news_processed"
+    __table_args__ = (
+        UniqueConstraint("news_id"),
+        Index("ix_news_processed_news_id", "news_id"),
+        Index("ix_news_processed_stock_code", "stock_code"),
+        Index("ix_news_processed_category", "category"),
+        Index("ix_news_processed_duplicate_group", "duplicate_group_id"),
+    )
+
+    id: Mapped[int] = mapped_column(BIGINT_TYPE, primary_key=True, autoincrement=True)
+    news_id: Mapped[int] = mapped_column(BIGINT_TYPE, nullable=False)
+    stock_code: Mapped[str | None] = mapped_column(String(16))
+    clean_title: Mapped[str | None] = mapped_column(String(512))
+    clean_summary: Mapped[str | None] = mapped_column(Text())
+    category: Mapped[str | None] = mapped_column(String(32))
+    sub_category: Mapped[str | None] = mapped_column(String(32))
+    sentiment: Mapped[str | None] = mapped_column(String(16))
+    heat_level: Mapped[str | None] = mapped_column(String(16))
+    keyword_list: Mapped[list[str] | None] = mapped_column(JSON)
+    tag_list: Mapped[list[str] | None] = mapped_column(JSON)
+    is_duplicate: Mapped[bool] = mapped_column(Boolean(), nullable=False, default=False)
+    duplicate_group_id: Mapped[str | None] = mapped_column(String(64))
+    main_news_id: Mapped[int | None] = mapped_column(BIGINT_TYPE)
+    processed_at: Mapped[datetime | None] = mapped_column(DateTime())
 
 
 class SegmentNewsMap(CreatedAtMixin, Base):
@@ -56,6 +90,27 @@ class SegmentNewsMap(CreatedAtMixin, Base):
     stock_code: Mapped[str] = mapped_column(String(16), nullable=False)
     relation_type: Mapped[str] = mapped_column(String(32), nullable=False)
     window_type: Mapped[str | None] = mapped_column(String(32))
+    anchor_date: Mapped[date | None] = mapped_column(Date())
+    distance_days: Mapped[int | None] = mapped_column()
+    weight_score: Mapped[float | None] = mapped_column(Numeric(8, 4))
+
+
+class PointNewsMap(CreatedAtMixin, Base):
+    __tablename__ = "point_news_map"
+    __table_args__ = (
+        UniqueConstraint("point_id", "news_id", "relation_type"),
+        Index("ix_point_news_map_point_id", "point_id"),
+        Index("ix_point_news_map_news_id", "news_id"),
+        Index("ix_point_news_map_stock_code", "stock_code"),
+        Index("ix_point_news_map_relation_type", "relation_type"),
+    )
+
+    id: Mapped[int] = mapped_column(BIGINT_TYPE, primary_key=True, autoincrement=True)
+    point_id: Mapped[int] = mapped_column(BIGINT_TYPE, nullable=False)
+    news_id: Mapped[int] = mapped_column(BIGINT_TYPE, nullable=False)
+    stock_code: Mapped[str] = mapped_column(String(16), nullable=False)
+    point_type: Mapped[str | None] = mapped_column(String(16))
+    relation_type: Mapped[str] = mapped_column(String(32), nullable=False)
     anchor_date: Mapped[date | None] = mapped_column(Date())
     distance_days: Mapped[int | None] = mapped_column()
     weight_score: Mapped[float | None] = mapped_column(Numeric(8, 4))
