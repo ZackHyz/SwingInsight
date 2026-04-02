@@ -4,9 +4,11 @@ from collections.abc import Iterable
 from datetime import date
 from typing import Any
 
+from swinginsight.domain.news.normalize import build_title_signature
+
 
 def normalize_title(title: str) -> str:
-    return " ".join(title.lower().split())
+    return build_title_signature(title)
 
 
 def dedupe_news_items(items: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
