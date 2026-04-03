@@ -564,8 +564,9 @@ def test_tushare_metadata_feed_treats_empty_response_as_miss() -> None:
 
 def test_import_market_data_uses_real_feed_by_default() -> None:
     from swinginsight.jobs.import_market_data import build_daily_price_feed
+    from swinginsight.settings import Settings
 
-    feed, source_name = build_daily_price_feed(demo=False)
+    feed, source_name = build_daily_price_feed(demo=False, settings=Settings.model_validate({}))
 
-    assert source_name == "akshare"
-    assert feed.__class__.__name__ == "AkshareDailyPriceFeed"
+    assert source_name == "priority"
+    assert feed.provider_names == ["akshare", "tushare", "mootdx"]

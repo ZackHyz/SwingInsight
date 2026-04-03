@@ -1,29 +1,69 @@
 from __future__ import annotations
 
 from datetime import date
-import os
 
 from swinginsight.db.base import Base
 from swinginsight.db.models.stock import StockBasic
 from swinginsight.db.session import get_engine, session_scope
 from swinginsight.ingest.adapters.akshare_daily_price_feed import AkshareDailyPriceFeed
 from swinginsight.ingest.adapters.demo_daily_price_feed import DemoDailyPriceFeed
+from swinginsight.ingest.adapters.mootdx_daily_price_feed import MootdxDailyPriceFeed
+from swinginsight.ingest.adapters.tushare_daily_price_feed import TushareDailyPriceFeed
 from swinginsight.ingest.daily_price_importer import DailyPriceImporter, ImportResult
-from swinginsight.ingest.source_priority import parse_priority
+from swinginsight.ingest.ports import DailyPriceFeed
+from swinginsight.settings import Settings
 from sqlalchemy import select
 
 
-def build_daily_price_feed(*, demo: bool) -> tuple[object, str]:
+class PriorityDailyPriceFeed:
+    def __init__(self, providers: list[tuple[str, DailyPriceFeed]]) -> None:
+        self.providers = providers
+        self.provider_names = [provider_name for provider_name, _ in providers]
+        self.resolved_source_name: str | None = None
+
+    def fetch_daily_prices(self, stock_code: str, start: date | None, end: date | None):
+        errors: list[str] = []
+        for provider_name, provider in self.providers:
+            try:
+                payloads = provider.fetch_daily_prices(stock_code=stock_code, start=start, end=end)
+            except Exception as exc:  # noqa: BLE001
+                errors.append(f"{provider_name}: {exc}")
+                continue
+            if payloads:
+                self.resolved_source_name = provider_name
+                return payloads
+            errors.append(f"{provider_name}: no daily prices returned")
+
+        self.resolved_source_name = None
+        raise RuntimeError("All daily price providers failed: " + "; ".join(errors))
+
+
+def build_daily_price_feed(*, demo: bool, settings: Settings | None = None) -> tuple[DailyPriceFeed, str]:
     if demo:
         return DemoDailyPriceFeed(), "demo"
 
-    priorities = parse_priority(os.getenv("DATA_SOURCE_PRIORITY_DAILY_PRICE"), ["akshare"])
-    for source_name in priorities:
-        if source_name == "akshare":
-            return AkshareDailyPriceFeed(), "akshare"
-        if source_name == "demo":
-            return DemoDailyPriceFeed(), "demo"
-    raise ValueError("No supported daily price source configured")
+    resolved_settings = settings or Settings.model_validate({})
+    providers: list[tuple[str, DailyPriceFeed]] = []
+    for source_name in resolved_settings.data_source_priority_daily_price:
+        provider = _build_daily_price_provider(source_name, resolved_settings)
+        if provider is not None:
+            providers.append((source_name, provider))
+
+    if not providers:
+        raise ValueError("No supported daily price source configured")
+    return PriorityDailyPriceFeed(providers), "priority"
+
+
+def _build_daily_price_provider(source_name: str, settings: Settings) -> DailyPriceFeed | None:
+    if source_name == "akshare":
+        return AkshareDailyPriceFeed()
+    if source_name == "tushare":
+        return TushareDailyPriceFeed(token=settings.tushare_token)
+    if source_name == "mootdx":
+        return MootdxDailyPriceFeed()
+    if source_name == "demo":
+        return DemoDailyPriceFeed()
+    return None
 
 
 def ensure_stock_basic(session, stock_code: str, feed: object) -> None:

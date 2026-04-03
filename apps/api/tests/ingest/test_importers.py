@@ -82,3 +82,37 @@ def test_daily_price_importer_upserts_rows() -> None:
         select(DailyPrice).where(DailyPrice.stock_code == "000001", DailyPrice.trade_date == date(2024, 1, 2))
     ).one()
     assert updated_row.close_price == 10.8
+
+
+def test_daily_price_importer_uses_resolved_source_name_for_task_log_and_payloads() -> None:
+    from swinginsight.db.models.market_data import DailyPrice, TaskRunLog
+    from swinginsight.ingest.daily_price_importer import DailyPriceImporter
+
+    class PriorityDailyPriceFeed:
+        resolved_source_name = "tushare"
+
+        def fetch_daily_prices(self, stock_code: str, start: date | None, end: date | None):
+            return [
+                {
+                    "stock_code": stock_code,
+                    "trade_date": date(2024, 1, 2),
+                    "open_price": 10,
+                    "high_price": 11,
+                    "low_price": 9,
+                    "close_price": 10.5,
+                    "adj_type": "qfq",
+                }
+            ]
+
+    session = build_session()
+    importer = DailyPriceImporter(session=session, feed=PriorityDailyPriceFeed(), source_name="priority")
+
+    result = importer.run(stock_code="000001", start=date(2024, 1, 1), end=date(2024, 1, 31))
+
+    assert result.inserted == 1
+
+    row = session.scalars(select(DailyPrice)).one()
+    assert row.data_source == "tushare"
+
+    log = session.scalars(select(TaskRunLog)).one()
+    assert log.input_params_json["source"] == "tushare"
