@@ -176,6 +176,84 @@ class FakeMootdxClient:
         )
 
 
+class PagedMootdxClient:
+    def __init__(self) -> None:
+        self.bars_calls: list[dict[str, object]] = []
+
+    def bars(self, **kwargs: object) -> pd.DataFrame:
+        self.bars_calls.append(kwargs)
+        start = int(kwargs["start"])
+        if start == 0:
+            rows = [
+                {
+                    "open": 1.34,
+                    "close": 1.36,
+                    "high": 1.37,
+                    "low": 1.33,
+                    "vol": 200000,
+                    "volume": 200000,
+                    "amount": 1230000000,
+                    "year": 2026,
+                    "month": 4,
+                    "day": 3,
+                    "hour": 15,
+                    "minute": 0,
+                    "datetime": "2026-04-03 15:00:00",
+                },
+                {
+                    "open": 1.32,
+                    "close": 1.34,
+                    "high": 1.35,
+                    "low": 1.31,
+                    "vol": 190000,
+                    "volume": 190000,
+                    "amount": 1180000000,
+                    "year": 2026,
+                    "month": 4,
+                    "day": 2,
+                    "hour": 15,
+                    "minute": 0,
+                    "datetime": "2026-04-02 15:00:00",
+                },
+            ]
+        elif start == 800:
+            rows = [
+                {
+                    "open": 1.28,
+                    "close": 1.31,
+                    "high": 1.33,
+                    "low": 1.27,
+                    "vol": 156789,
+                    "volume": 156789,
+                    "amount": 987654321,
+                    "year": 2026,
+                    "month": 4,
+                    "day": 1,
+                    "hour": 15,
+                    "minute": 0,
+                    "datetime": "2026-04-01 15:00:00",
+                },
+                {
+                    "open": 1.25,
+                    "close": 1.28,
+                    "high": 1.29,
+                    "low": 1.23,
+                    "vol": 123456,
+                    "volume": 123456,
+                    "amount": 876543210,
+                    "year": 2026,
+                    "month": 3,
+                    "day": 31,
+                    "hour": 15,
+                    "minute": 0,
+                    "datetime": "2026-03-31 15:00:00",
+                },
+            ]
+        else:
+            rows = []
+        return pd.DataFrame(rows)
+
+
 def test_akshare_daily_price_feed_parses_eastmoney_kline_payload() -> None:
     from swinginsight.ingest.adapters.akshare_daily_price_feed import AkshareDailyPriceFeed
 
@@ -252,6 +330,38 @@ def test_mootdx_daily_price_feed_maps_bars_to_unified_rows() -> None:
         "start": 0,
         "offset": 800,
     }
+
+
+def test_mootdx_daily_price_feed_pages_until_it_reaches_requested_start_date() -> None:
+    from swinginsight.ingest.adapters.mootdx_daily_price_feed import MootdxDailyPriceFeed
+
+    fake_client = PagedMootdxClient()
+
+    rows = MootdxDailyPriceFeed(client=fake_client).fetch_daily_prices(
+        stock_code="600157",
+        start=date(2026, 3, 31),
+        end=date(2026, 4, 1),
+    )
+
+    assert len(rows) == 2
+    assert rows[0]["trade_date"] == date(2026, 3, 31)
+    assert rows[1]["trade_date"] == date(2026, 4, 1)
+    assert len(fake_client.bars_calls) == 2
+    assert fake_client.bars_calls[0]["start"] == 0
+    assert fake_client.bars_calls[1]["start"] == 800
+
+
+def test_mootdx_daily_price_feed_rejects_invalid_symbol() -> None:
+    from swinginsight.ingest.adapters.mootdx_daily_price_feed import MootdxDailyPriceFeed
+
+    fake_client = FakeMootdxClient()
+
+    with pytest.raises(ValueError, match="6-digit stock code"):
+        MootdxDailyPriceFeed(client=fake_client).fetch_daily_prices(
+            stock_code="12345",
+            start=date(2026, 3, 30),
+            end=date(2026, 3, 31),
+        )
 
 
 def test_tushare_daily_price_feed_uses_module_level_qfq_contract(monkeypatch: pytest.MonkeyPatch) -> None:

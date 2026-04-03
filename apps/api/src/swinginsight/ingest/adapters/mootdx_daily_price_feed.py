@@ -6,24 +6,18 @@ from typing import Any
 import pandas as pd
 
 from mootdx.quotes import Quotes
-from mootdx.utils import get_stock_market
 
 
 class MootdxDailyPriceFeed:
+    page_size = 800
+
     def __init__(self, client: Any | None = None) -> None:
         self.client = client
 
     def fetch_daily_prices(self, stock_code: str, start: date | None, end: date | None) -> list[dict[str, Any]]:
         symbol = self._normalize_stock_code(stock_code)
         self._infer_market(symbol)
-        rows = self._rows_from_response(
-            self._get_client().bars(
-                symbol=symbol,
-                frequency=9,
-                start=0,
-                offset=800,
-            )
-        )
+        rows = self._fetch_rows(symbol=symbol, start=start, end=end)
         payloads = [self._map_row(stock_code=symbol, row=row) for row in rows]
         if start is not None or end is not None:
             payloads = [
@@ -43,15 +37,49 @@ class MootdxDailyPriceFeed:
         normalized = stock_code.strip()
         if "." in normalized:
             normalized = normalized.split(".", 1)[0]
-        if normalized.startswith(("sh", "sz", "SH", "SZ")):
+        if normalized.startswith(("sh", "sz", "bj", "SH", "SZ", "BJ")):
             normalized = normalized[2:]
+        if len(normalized) != 6 or not normalized.isdigit():
+            raise ValueError("Mootdx daily prices require a 6-digit stock code")
         return normalized
 
     def _infer_market(self, stock_code: str) -> str:
-        market = get_stock_market(stock_code, string=True)
-        if market not in {"sh", "sz"}:
-            raise ValueError(f"Mootdx daily prices only support Shanghai/Shenzhen stock codes: {stock_code}")
-        return market
+        if stock_code.startswith(("5", "6", "7", "9")):
+            return "sh"
+        if stock_code.startswith(("4", "8")):
+            return "bj"
+        if stock_code.startswith(("0", "1", "2", "3")):
+            return "sz"
+        raise ValueError(f"Mootdx daily prices only support Shanghai/Shenzhen/BJ stock codes: {stock_code}")
+
+    def _fetch_rows(self, symbol: str, start: date | None, end: date | None) -> list[dict[str, Any]]:
+        target_date = start or end
+        rows: list[dict[str, Any]] = []
+        page_start = 0
+
+        while True:
+            page_rows = self._rows_from_response(
+                self._get_client().bars(
+                    symbol=symbol,
+                    frequency=9,
+                    start=page_start,
+                    offset=self.page_size,
+                )
+            )
+            if not page_rows:
+                break
+
+            rows.extend(page_rows)
+            if target_date is None:
+                break
+
+            oldest_trade_date = min(self._parse_trade_date(row) for row in page_rows)
+            if oldest_trade_date <= target_date:
+                break
+
+            page_start += self.page_size
+
+        return rows
 
     def _rows_from_response(self, response: Any) -> list[dict[str, Any]]:
         if response is None:
