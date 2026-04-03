@@ -70,15 +70,15 @@ def test_cli_rebuild_segments_persists_turning_points_and_segments(tmp_path) -> 
     )
 
     assert result.returncode == 0
-    assert "turning_points=4" in result.stdout
-    assert "segments=3" in result.stdout
+    assert "turning_points=3" in result.stdout
+    assert "segments=2" in result.stdout
 
     connection = sqlite3.connect(db_path)
     try:
         turning_points = connection.execute("select count(*) from turning_point").fetchone()
         segments = connection.execute("select count(*) from swing_segment").fetchone()
-        assert turning_points[0] == 4
-        assert segments[0] == 3
+        assert turning_points[0] == 3
+        assert segments[0] == 2
     finally:
         connection.close()
 
@@ -119,3 +119,20 @@ def test_cli_exposes_import_news(tmp_path) -> None:
         assert rows[0] == 2
     finally:
         connection.close()
+
+
+def test_cli_help_includes_pattern_backfill_order() -> None:
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(ROOT / "src")
+
+    result = subprocess.run(
+        [sys.executable, "-m", "swinginsight.jobs.cli", "--help"],
+        cwd=ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0
+    assert "build-pattern-windows -> materialize-pattern-features -> materialize-pattern-future-stats" in result.stdout

@@ -102,6 +102,46 @@ export default function StockResearchPage(props: StockResearchPageProps) {
 
   const isLoading = pageData === null && loadError === null;
 
+  function resolveNewsBadge(item: StockResearchData["news_items"][number]): string {
+    if (item.category === "announcement" || item.source_type === "announcement") {
+      return "公告";
+    }
+    return "资讯";
+  }
+
+  function resolveNewsTagStyle(tag: string) {
+    if (tag === "公告") {
+      return { color: "#9a3412", background: "#fed7aa" };
+    }
+    if (tag === "资讯") {
+      return { color: "#1d4ed8", background: "#dbeafe" };
+    }
+    if (tag === "利多") {
+      return { color: "#166534", background: "#dcfce7" };
+    }
+    if (tag === "利空") {
+      return { color: "#991b1b", background: "#fee2e2" };
+    }
+    if (tag === "中性") {
+      return { color: "#374151", background: "#e5e7eb" };
+    }
+    if (tag.includes("顶部") || tag.includes("底部")) {
+      return { color: "#155e75", background: "#cffafe" };
+    }
+    if (tag.includes("波段")) {
+      return { color: "#92400e", background: "#fde68a" };
+    }
+    return { color: "#6b7280", background: "#f3f4f6" };
+  }
+
+  function formatMetricValue(value: number | undefined) {
+    if (value === undefined) {
+      return "--";
+    }
+    const rounded = Math.round(value * 100) / 100;
+    return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(2);
+  }
+
   return (
     <main
       style={{
@@ -198,9 +238,11 @@ export default function StockResearchPage(props: StockResearchPageProps) {
               <h1>
                 {pageData.stock.stock_name} ({pageData.stock.stock_code})
               </h1>
-              <p>
-                {pageData.stock.market} / {pageData.stock.industry ?? "Unknown"}
-              </p>
+              {pageData.stock.industry ? (
+                <p>
+                  {pageData.stock.market} / {pageData.stock.industry}
+                </p>
+              ) : null}
               <p>当前状态: {pageData.current_state.label}</p>
             </div>
             <div style={{ minWidth: 280, color: "#6b7280" }}>
@@ -258,11 +300,174 @@ export default function StockResearchPage(props: StockResearchPageProps) {
             }}
           >
             <h2>相关新闻</h2>
-            <ul>
+            {pageData.current_state.news_summary ? (
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 16 }}>
+                <span
+                  style={{
+                    padding: "6px 10px",
+                    borderRadius: 999,
+                    background: "#f3efe6",
+                    color: "#5b4632",
+                    fontSize: 13,
+                    fontWeight: 700,
+                  }}
+                >
+                  窗口新闻 {formatMetricValue(pageData.current_state.news_summary.window_news_count)}
+                </span>
+                <span
+                  style={{
+                    padding: "6px 10px",
+                    borderRadius: 999,
+                    background: "#fff1e6",
+                    color: "#9a3412",
+                    fontSize: 13,
+                    fontWeight: 700,
+                  }}
+                >
+                  公告 {formatMetricValue(pageData.current_state.news_summary.announcement_count)}
+                </span>
+                <span
+                  style={{
+                    padding: "6px 10px",
+                    borderRadius: 999,
+                    background: "#e0f2fe",
+                    color: "#0c4a6e",
+                    fontSize: 13,
+                    fontWeight: 700,
+                  }}
+                >
+                  修正情绪 {formatMetricValue(pageData.current_state.news_summary.avg_adjusted_sentiment)}
+                </span>
+                <span
+                  style={{
+                    padding: "6px 10px",
+                    borderRadius: 999,
+                    background: "#dcfce7",
+                    color: "#166534",
+                    fontSize: 13,
+                    fontWeight: 700,
+                  }}
+                >
+                  正向事件 {formatMetricValue(pageData.current_state.news_summary.positive_event_count)}
+                </span>
+                <span
+                  style={{
+                    padding: "6px 10px",
+                    borderRadius: 999,
+                    background: "#fee2e2",
+                    color: "#991b1b",
+                    fontSize: 13,
+                    fontWeight: 700,
+                  }}
+                >
+                  负向事件 {formatMetricValue(pageData.current_state.news_summary.negative_event_count)}
+                </span>
+                <span
+                  style={{
+                    padding: "6px 10px",
+                    borderRadius: 999,
+                    background: "#ede9fe",
+                    color: "#5b21b6",
+                    fontSize: 13,
+                    fontWeight: 700,
+                  }}
+                >
+                  治理事件 {formatMetricValue(pageData.current_state.news_summary.governance_event_count)}
+                </span>
+              </div>
+            ) : null}
+            <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "grid", gap: 12 }}>
               {pageData.news_items.map((item) => (
-                <li key={item.news_id}>
-                  <strong>{item.title}</strong> <span>{item.news_date ?? "unknown-date"}</span>
+                (() => {
+                  const tags = item.display_tags && item.display_tags.length > 0 ? item.display_tags : [resolveNewsBadge(item)];
+                  return (
+                <li
+                  key={item.news_id}
+                  style={{
+                    display: "grid",
+                    gap: 6,
+                    padding: 14,
+                    borderRadius: 14,
+                    border: "1px solid #eadfca",
+                    background: item.category === "announcement" ? "#fff7ed" : "#fffcf5",
+                  }}
+                >
+                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                    {tags.map((tag) => {
+                      const tagStyle = resolveNewsTagStyle(tag);
+                      return (
+                        <span
+                          key={`${item.news_id}-${tag}`}
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            padding: "2px 8px",
+                            borderRadius: 999,
+                            fontSize: 12,
+                            fontWeight: 700,
+                            color: tagStyle.color,
+                            background: tagStyle.background,
+                          }}
+                        >
+                          {tag}
+                        </span>
+                      );
+                    })}
+                    <span style={{ color: "#6b7280", fontSize: 13 }}>
+                      {[item.source_name ?? "未知来源", item.news_date ?? "unknown-date"].join(" · ")}
+                    </span>
+                  </div>
+                  <strong>{item.title}</strong>
+                  {item.event_types && item.event_types.length > 0 ? (
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                      {item.event_types.map((eventType) => (
+                        <span
+                          key={`${item.news_id}-${eventType}`}
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            padding: "2px 8px",
+                            borderRadius: 999,
+                            fontSize: 12,
+                            fontWeight: 700,
+                            color: "#4338ca",
+                            background: "#e0e7ff",
+                          }}
+                        >
+                          {eventType}
+                        </span>
+                      ))}
+                      {typeof item.sentiment_score_adjusted === "number" ? (
+                        <span style={{ color: "#6b7280", fontSize: 13, fontWeight: 600 }}>
+                          修正后情绪 {item.sentiment_score_adjusted.toFixed(2)}
+                        </span>
+                      ) : null}
+                      {item.event_conflict_flag ? (
+                        <span
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            padding: "2px 8px",
+                            borderRadius: 999,
+                            fontSize: 12,
+                            fontWeight: 700,
+                            color: "#7c2d12",
+                            background: "#ffedd5",
+                          }}
+                        >
+                          事件冲突
+                        </span>
+                      ) : null}
+                    </div>
+                  ) : typeof item.sentiment_score_adjusted === "number" ? (
+                    <div style={{ color: "#6b7280", fontSize: 13, fontWeight: 600 }}>
+                      修正后情绪 {item.sentiment_score_adjusted.toFixed(2)}
+                    </div>
+                  ) : null}
+                  {item.summary ? <p style={{ margin: 0, color: "#4b5563", lineHeight: 1.6 }}>{item.summary}</p> : null}
                 </li>
+                  );
+                })()
               ))}
             </ul>
           </section>

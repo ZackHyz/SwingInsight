@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from swinginsight.domain.news.sentiment import NewsSentimentScore, score_news_sentiment
+
 
 @dataclass(slots=True, frozen=True)
 class NewsTags:
@@ -10,19 +12,28 @@ class NewsTags:
     tag_list: list[str]
 
 
-POSITIVE_KEYWORDS = ("扭亏", "增长", "增持", "回购", "中标", "订单", "签署")
-NEGATIVE_KEYWORDS = ("风险", "减持", "问询", "异常波动", "下滑", "亏损")
-
-
-def build_tags(*, title: str, source_type: str | None, duplicate_count: int) -> NewsTags:
-    sentiment = "neutral"
-    if any(keyword in title for keyword in POSITIVE_KEYWORDS):
-        sentiment = "positive"
-    if any(keyword in title for keyword in NEGATIVE_KEYWORDS):
-        sentiment = "negative"
-
-    heat_level = "high" if duplicate_count > 1 or source_type == "announcement" else "medium"
+def build_tags(
+    *,
+    title: str,
+    summary: str | None = None,
+    source_type: str | None,
+    duplicate_count: int,
+    sentiment_result: NewsSentimentScore | None = None,
+) -> NewsTags:
+    resolved_sentiment = sentiment_result or score_news_sentiment(
+        title=title,
+        summary=summary,
+        source_type=source_type,
+        duplicate_count=duplicate_count,
+    )
+    heat_level = "low"
+    if resolved_sentiment.heat_score >= 0.75:
+        heat_level = "high"
+    elif resolved_sentiment.heat_score >= 0.45:
+        heat_level = "medium"
     tags = ["official" if source_type == "announcement" else "follow_up"]
     tags.append("repeated_spread" if duplicate_count > 1 else "first_release")
+    if resolved_sentiment.event_conflict_flag:
+        tags.append("conflicting_events")
 
-    return NewsTags(sentiment=sentiment, heat_level=heat_level, tag_list=tags)
+    return NewsTags(sentiment=resolved_sentiment.sentiment_label, heat_level=heat_level, tag_list=tags)

@@ -4,16 +4,26 @@ import argparse
 from datetime import date
 
 from swinginsight.jobs.align_news import align_news
+from swinginsight.jobs.build_pattern_windows import build_pattern_windows
 from swinginsight.jobs.import_market_data import import_daily_prices
 from swinginsight.jobs.import_news import import_news
 from swinginsight.jobs.materialize_features import materialize_features
+from swinginsight.jobs.materialize_pattern_features import materialize_pattern_features
+from swinginsight.jobs.materialize_pattern_future_stats import materialize_pattern_future_stats
 from swinginsight.jobs.predict_state import predict_state
 from swinginsight.jobs.process_news import process_news
 from swinginsight.jobs.rebuild_segments import rebuild_segments
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="swinginsight")
+    parser = argparse.ArgumentParser(
+        prog="swinginsight",
+        epilog=(
+            "单股 pattern 回填顺序:\n"
+            "  rebuild-segments -> build-pattern-windows -> materialize-pattern-features -> materialize-pattern-future-stats"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     daily_prices = subparsers.add_parser("import-daily-prices")
@@ -46,6 +56,25 @@ def build_parser() -> argparse.ArgumentParser:
 
     materialize = subparsers.add_parser("materialize-features")
     materialize.add_argument("--stock-code", required=True)
+
+    pattern_windows = subparsers.add_parser(
+        "build-pattern-windows",
+        help="为单只股票生成固定 7 日滑窗检索样本",
+    )
+    pattern_windows.add_argument("--stock-code", required=True)
+    pattern_windows.add_argument("--window-size", type=int, default=7)
+
+    pattern_future = subparsers.add_parser(
+        "materialize-pattern-future-stats",
+        help="为滑窗样本预计算后续 1/3/5/10 日收益统计",
+    )
+    pattern_future.add_argument("--stock-code", required=True)
+
+    pattern_features = subparsers.add_parser(
+        "materialize-pattern-features",
+        help="为滑窗样本生成粗召回和精排特征",
+    )
+    pattern_features.add_argument("--stock-code", required=True)
 
     predict = subparsers.add_parser("predict-state")
     predict.add_argument("--stock-code", required=True)
@@ -95,7 +124,9 @@ def main(argv: list[str] | None = None) -> int:
         )
         print(
             f"process-news stock_code={args.stock_code} "
-            f"processed={result.processed_count} duplicates={result.duplicates}"
+            f"processed={result.processed_count} duplicates={result.duplicates} "
+            f"sentiment_results={result.sentiment_results} event_results={result.event_results} "
+            f"conflict_news={result.conflict_news}"
         )
         return 0
 
@@ -124,6 +155,30 @@ def main(argv: list[str] | None = None) -> int:
         print(
             f"materialize-features stock_code={args.stock_code} "
             f"segments={result.segments} features={result.features}"
+        )
+        return 0
+
+    if args.command == "build-pattern-windows":
+        result = build_pattern_windows(stock_code=args.stock_code, window_size=args.window_size)
+        print(
+            f"build-pattern-windows stock_code={args.stock_code} window_size={args.window_size} "
+            f"created={result.created} updated={result.updated} skipped={result.skipped}"
+        )
+        return 0
+
+    if args.command == "materialize-pattern-future-stats":
+        result = materialize_pattern_future_stats(stock_code=args.stock_code)
+        print(
+            f"materialize-pattern-future-stats stock_code={args.stock_code} "
+            f"updated={result.updated} skipped={result.skipped}"
+        )
+        return 0
+
+    if args.command == "materialize-pattern-features":
+        result = materialize_pattern_features(stock_code=args.stock_code)
+        print(
+            f"materialize-pattern-features stock_code={args.stock_code} "
+            f"windows={result.windows} features={result.features} skipped={result.skipped}"
         )
         return 0
 

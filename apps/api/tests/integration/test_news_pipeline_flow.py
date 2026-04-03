@@ -38,6 +38,9 @@ def test_news_pipeline_flow_backfills_processes_and_aligns(tmp_path) -> None:
     assert news_import.returncode == 0
     assert process.returncode == 0
     assert align.returncode == 0
+    assert "sentiment_results=" in process.stdout
+    assert "event_results=" in process.stdout
+    assert "conflict_news=" in process.stdout
 
     connection = sqlite3.connect(db_path)
     try:

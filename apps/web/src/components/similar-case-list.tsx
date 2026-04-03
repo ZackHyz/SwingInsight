@@ -32,64 +32,6 @@ function formatForwardReturn(value?: number | null) {
   return `${value >= 0 ? "+" : ""}${(value * 100).toFixed(2)}%`;
 }
 
-function findHighlightIndexes(chartWindow: SegmentChartWindowData) {
-  const startIndex = chartWindow.prices.findIndex((row) => row.trade_date === chartWindow.highlight_range.start_date);
-  const endIndex = chartWindow.prices.findIndex((row) => row.trade_date === chartWindow.highlight_range.end_date);
-  if (startIndex === -1 || endIndex === -1) {
-    return null;
-  }
-  return {
-    startIndex: Math.min(startIndex, endIndex),
-    endIndex: Math.max(startIndex, endIndex),
-  };
-}
-
-function sliceChartWindow(chartWindow: SegmentChartWindowData, startIndex: number, endIndex: number): SegmentChartWindowData {
-  const prices = chartWindow.prices.slice(startIndex, endIndex + 1);
-  const windowStartDate = prices[0]?.trade_date ?? chartWindow.highlight_range.start_date;
-  const windowEndDate = prices[prices.length - 1]?.trade_date ?? chartWindow.highlight_range.end_date;
-
-  return {
-    ...chartWindow,
-    prices,
-    auto_turning_points: chartWindow.auto_turning_points.filter(
-      (point) => point.point_date >= windowStartDate && point.point_date <= windowEndDate
-    ),
-    final_turning_points: chartWindow.final_turning_points.filter(
-      (point) => point.point_date >= windowStartDate && point.point_date <= windowEndDate
-    ),
-  };
-}
-
-function normalizeCompareWindows(currentChartWindow: SegmentChartWindowData, historicalChartWindow: SegmentChartWindowData) {
-  const currentHighlight = findHighlightIndexes(currentChartWindow);
-  const historicalHighlight = findHighlightIndexes(historicalChartWindow);
-  if (currentHighlight === null || historicalHighlight === null) {
-    return {
-      current: currentChartWindow,
-      historical: historicalChartWindow,
-    };
-  }
-
-  const sharedLeadingCount = Math.min(currentHighlight.startIndex, historicalHighlight.startIndex);
-  const currentTrailingCount = currentChartWindow.prices.length - currentHighlight.endIndex - 1;
-  const historicalTrailingCount = historicalChartWindow.prices.length - historicalHighlight.endIndex - 1;
-  const sharedTrailingCount = Math.min(currentTrailingCount, historicalTrailingCount);
-
-  return {
-    current: sliceChartWindow(
-      currentChartWindow,
-      currentHighlight.startIndex - sharedLeadingCount,
-      currentHighlight.endIndex + sharedTrailingCount
-    ),
-    historical: sliceChartWindow(
-      historicalChartWindow,
-      historicalHighlight.startIndex - sharedLeadingCount,
-      historicalHighlight.endIndex + sharedTrailingCount
-    ),
-  };
-}
-
 export function SimilarCaseList({ items, currentChartWindow, loadSegmentChartWindow }: SimilarCaseListProps) {
   const [activeSegmentId, setActiveSegmentId] = useState<number | null>(null);
   const [chartWindows, setChartWindows] = useState<Record<number, SegmentChartWindowData>>({});
@@ -122,13 +64,6 @@ export function SimilarCaseList({ items, currentChartWindow, loadSegmentChartWin
   const activeChartWindow = activeSegmentId === null ? null : chartWindows[activeSegmentId] ?? null;
   const activeChartError = activeSegmentId === null ? null : chartErrors[activeSegmentId] ?? null;
   const activeChartLoading = activeSegmentId === null ? false : loadingSegmentIds[activeSegmentId] === true;
-  const compareWindows =
-    currentChartWindow !== null && activeChartWindow !== null
-      ? normalizeCompareWindows(currentChartWindow, activeChartWindow)
-      : null;
-  const currentCompareWindow = compareWindows?.current ?? currentChartWindow;
-  const historicalCompareWindow = compareWindows?.historical ?? activeChartWindow;
-
   if (items.length === 0) {
     return (
       <section>
@@ -142,11 +77,11 @@ export function SimilarCaseList({ items, currentChartWindow, loadSegmentChartWin
     <section>
       <h3>同股优先相似样本</h3>
       <p>会优先展示当前股票历史上最接近的波段样本；如果同股样本不足，再补充全市场样本。相似度越高，说明走势和当前越接近。</p>
-      <p>相似率综合了价格、成交量、换手率和最近 10 根 K 线组合形态，会同时比较统计摘要和最近一段量价序列。</p>
+      <p>相似率综合了价格、K线形态、成交量、换手率、趋势背景和波动率，会同时比较固定 7 个交易日窗口的路径和结构。</p>
       <ul style={{ display: "grid", gap: 12, padding: 0, listStyle: "none" }}>
         {items.map((item) => (
           <li
-            key={item.segment_id}
+            key={`${item.segment_id}-${item.window_id ?? item.window_start_date ?? item.start_date ?? "case"}`}
             style={{
               padding: 14,
               borderRadius: 14,
@@ -166,12 +101,15 @@ export function SimilarCaseList({ items, currentChartWindow, loadSegmentChartWin
                 查看K线对比
               </button>
             </div>
-            <div>时间段 {item.start_date ?? "--"} 至 {item.end_date ?? "--"}</div>
+            <div>相似窗口：{item.window_start_date ?? item.start_date ?? "--"} 至 {item.window_end_date ?? item.end_date ?? "--"}</div>
+            <div>所属波段：{item.segment_start_date ?? item.start_date ?? "--"} 至 {item.segment_end_date ?? item.end_date ?? "--"}</div>
             <div>相似度 {(item.score * 100).toFixed(1)}%</div>
             <div>价格相似 {formatPercent(item.price_score)}</div>
             <div>成交量相似 {formatPercent(item.volume_score)}</div>
             <div>换手率相似 {formatPercent(item.turnover_score)}</div>
-            <div>K线形态相似 {formatPercent(item.pattern_score)}</div>
+            <div>K线形态相似 {formatPercent(item.candle_score ?? item.pattern_score)}</div>
+            <div>趋势背景相似 {formatPercent(item.trend_score)}</div>
+            <div>波动率相似 {formatPercent(item.vola_score)}</div>
             <div>样本区间涨跌幅 {formatPctChange(item.pct_change)}</div>
             <div>样本后续1日涨跌幅 {formatForwardReturn(item.return_1d)}</div>
             <div>样本后续3日涨跌幅 {formatForwardReturn(item.return_3d)}</div>
@@ -215,7 +153,8 @@ export function SimilarCaseList({ items, currentChartWindow, loadSegmentChartWin
             <div style={{ display: "flex", justifyContent: "space-between", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
               <div>
                 <strong>样本股票 {activeItem.stock_code}</strong>
-                <div>时间段 {activeItem.start_date ?? "--"} 至 {activeItem.end_date ?? "--"}</div>
+                <div>相似窗口：{activeItem.window_start_date ?? activeItem.start_date ?? "--"} 至 {activeItem.window_end_date ?? activeItem.end_date ?? "--"}</div>
+                <div>所属波段：{activeItem.segment_start_date ?? activeItem.start_date ?? "--"} 至 {activeItem.segment_end_date ?? activeItem.end_date ?? "--"}</div>
               </div>
               <button type="button" onClick={() => setActiveSegmentId(null)}>
                 关闭
@@ -223,8 +162,8 @@ export function SimilarCaseList({ items, currentChartWindow, loadSegmentChartWin
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 16 }}>
               <section style={{ display: "grid", gap: 8 }}>
-                <strong>当前走势</strong>
-                {currentCompareWindow === null ? (
+                <strong>当前相似窗口</strong>
+                {currentChartWindow === null ? (
                   <p>当前对比K线暂不可用</p>
                 ) : (
                   <KlineChart
@@ -232,27 +171,27 @@ export function SimilarCaseList({ items, currentChartWindow, loadSegmentChartWin
                     mode="readonly"
                     width={520}
                     height={420}
-                    prices={currentCompareWindow.prices}
-                    autoPoints={currentCompareWindow.auto_turning_points}
-                    finalPoints={currentCompareWindow.final_turning_points}
-                    highlightRange={currentCompareWindow.highlight_range}
+                    prices={currentChartWindow.prices}
+                    autoPoints={currentChartWindow.auto_turning_points}
+                    finalPoints={currentChartWindow.final_turning_points}
+                    highlightRange={currentChartWindow.highlight_range}
                   />
                 )}
               </section>
               <section style={{ display: "grid", gap: 8 }}>
-                <strong>历史样本</strong>
+                <strong>历史相似窗口</strong>
                 {activeChartLoading ? <p>正在加载样本局部K线...</p> : null}
                 {activeChartError === null ? null : <p>{activeChartError}</p>}
-                {historicalCompareWindow === null ? null : (
+                {activeChartWindow === null ? null : (
                   <KlineChart
                     title={null}
                     mode="readonly"
                     width={520}
                     height={420}
-                    prices={historicalCompareWindow.prices}
-                    autoPoints={historicalCompareWindow.auto_turning_points}
-                    finalPoints={historicalCompareWindow.final_turning_points}
-                    highlightRange={historicalCompareWindow.highlight_range}
+                    prices={activeChartWindow.prices}
+                    autoPoints={activeChartWindow.auto_turning_points}
+                    finalPoints={activeChartWindow.final_turning_points}
+                    highlightRange={activeChartWindow.highlight_range}
                   />
                 )}
               </section>

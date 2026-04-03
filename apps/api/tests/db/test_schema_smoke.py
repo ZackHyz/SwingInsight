@@ -46,3 +46,9 @@ def test_daily_price_unique_constraint() -> None:
         )
         with pytest.raises(IntegrityError):
             session.commit()
+
+
+def test_segment_uid_length_supports_algorithm_version_suffix() -> None:
+    from swinginsight.db.models.segment import SwingSegment
+
+    assert SwingSegment.__table__.c.segment_uid.type.length >= 128

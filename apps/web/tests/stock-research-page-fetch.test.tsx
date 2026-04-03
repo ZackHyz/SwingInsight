@@ -22,7 +22,23 @@ function buildData(): StockResearchData {
     auto_turning_points: [],
     final_turning_points: [],
     trade_markers: [],
-    news_items: [],
+    news_items: [
+      {
+        news_id: 1,
+        title: "盈利预告改善",
+        summary: "公告显示利润改善",
+        source_name: "cninfo",
+        source_type: "announcement",
+        category: "announcement",
+        sub_category: "earnings",
+        sentiment: "positive",
+        news_date: "2024-01-03",
+        display_tags: ["当前波段内", "顶部前2日", "公告", "利多"],
+        sentiment_score_adjusted: 0.82,
+        event_types: ["earnings"],
+        event_conflict_flag: false,
+      },
+    ],
     current_state: {
       label: "主升初期",
       summary: "主升初期，10日上行概率 0.58",
@@ -30,6 +46,16 @@ function buildData(): StockResearchData {
       key_features: {},
       risk_flags: {},
       similar_cases: [],
+      news_summary: {
+        window_news_count: 3,
+        announcement_count: 2,
+        positive_news_ratio: 0.67,
+        high_heat_count: 1,
+        avg_adjusted_sentiment: 0.24,
+        positive_event_count: 2,
+        negative_event_count: 0,
+        governance_event_count: 1,
+      },
     },
   };
 }
@@ -100,5 +126,77 @@ describe("stock research page fetch", () => {
     });
     expect(apiClient.getStockResearch).toHaveBeenNthCalledWith(1, "000001");
     expect(apiClient.getStockResearch).toHaveBeenNthCalledWith(2, "600157");
+  });
+
+  it("shows announcement badge in news list", async () => {
+    const apiClient: ApiClient = {
+      getStockResearch: vi.fn().mockResolvedValue(buildData()),
+      commitTurningPoints: vi.fn(),
+      getSegmentChartWindow: vi.fn(),
+      getSegmentDetail: vi.fn(),
+      getSegmentLibrary: vi.fn(),
+      getPrediction: vi.fn(),
+    };
+
+    render(<StockResearchPage stockCode="000001" apiClient={apiClient} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("盈利预告改善")).toBeTruthy();
+    });
+    expect(screen.getByText("公告")).toBeTruthy();
+    expect(screen.getByText("当前波段内")).toBeTruthy();
+    expect(screen.getByText("顶部前2日")).toBeTruthy();
+    expect(screen.getByText("利多")).toBeTruthy();
+    expect(screen.getByText(/cninfo/)).toBeTruthy();
+  });
+
+  it("renders news sentiment summary and event metadata", async () => {
+    const apiClient: ApiClient = {
+      getStockResearch: vi.fn().mockResolvedValue(buildData()),
+      commitTurningPoints: vi.fn(),
+      getSegmentChartWindow: vi.fn(),
+      getSegmentDetail: vi.fn(),
+      getSegmentLibrary: vi.fn(),
+      getPrediction: vi.fn(),
+    };
+
+    render(<StockResearchPage stockCode="000001" apiClient={apiClient} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("盈利预告改善")).toBeTruthy();
+    });
+
+    expect(screen.getByText("窗口新闻 3")).toBeTruthy();
+    expect(screen.getByText("公告 2")).toBeTruthy();
+    expect(screen.getByText("修正情绪 0.24")).toBeTruthy();
+    expect(screen.getByText("正向事件 2")).toBeTruthy();
+    expect(screen.getByText("治理事件 1")).toBeTruthy();
+    expect(screen.getByText("earnings")).toBeTruthy();
+    expect(screen.getByText("修正后情绪 0.82")).toBeTruthy();
+  });
+
+  it("hides market and industry line when industry is missing", async () => {
+    const apiClient: ApiClient = {
+      getStockResearch: vi.fn().mockResolvedValue({
+        ...buildData(),
+        stock: {
+          ...buildData().stock,
+          industry: null,
+        },
+      }),
+      commitTurningPoints: vi.fn(),
+      getSegmentChartWindow: vi.fn(),
+      getSegmentDetail: vi.fn(),
+      getSegmentLibrary: vi.fn(),
+      getPrediction: vi.fn(),
+    };
+
+    render(<StockResearchPage stockCode="000001" apiClient={apiClient} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Ping An Bank (000001)")).toBeTruthy();
+    });
+
+    expect(screen.queryByText("A / Unknown")).toBeNull();
   });
 });

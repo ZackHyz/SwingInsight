@@ -36,6 +36,7 @@ def test_zigzag_detector_marks_major_turning_points() -> None:
         date(2024, 1, 10),
         date(2024, 1, 12),
     ]
+    assert points[-1].confirm_date is None
 
 
 def test_zigzag_detector_uses_kline_highs_and_lows_for_turning_points() -> None:
@@ -57,6 +58,48 @@ def test_zigzag_detector_uses_kline_highs_and_lows_for_turning_points() -> None:
         (date(2024, 1, 4), "trough", 9.0),
         (date(2024, 1, 5), "peak", 10.9),
     ]
+
+
+def test_zigzag_detector_moves_last_peak_forward_when_later_bar_breaks_higher() -> None:
+    from swinginsight.domain.turning_points.zigzag import ZigZagDetector
+
+    detector = ZigZagDetector(reversal_pct=0.08)
+    price_series = [
+        {"trade_date": date(2026, 3, 27), "close_price": 2.55, "high_price": 2.56, "low_price": 2.46},
+        {"trade_date": date(2026, 3, 30), "close_price": 2.56, "high_price": 2.57, "low_price": 2.49},
+        {"trade_date": date(2026, 3, 31), "close_price": 2.51, "high_price": 2.58, "low_price": 2.50},
+        {"trade_date": date(2026, 4, 1), "close_price": 2.63, "high_price": 2.68, "low_price": 2.51},
+        {"trade_date": date(2026, 4, 2), "close_price": 2.62, "high_price": 2.67, "low_price": 2.57},
+        {"trade_date": date(2026, 4, 3), "close_price": 2.70, "high_price": 2.75, "low_price": 2.60},
+    ]
+
+    points = detector.detect(price_series)
+
+    assert points[-1].point_type == "peak"
+    assert points[-1].point_date == date(2026, 4, 3)
+    assert points[-1].point_price == 2.75
+    assert points[-1].confirm_date is None
+
+
+def test_zigzag_detector_moves_last_trough_forward_when_later_bar_breaks_lower() -> None:
+    from swinginsight.domain.turning_points.zigzag import ZigZagDetector
+
+    detector = ZigZagDetector(reversal_pct=0.08)
+    price_series = [
+        {"trade_date": date(2026, 3, 27), "close_price": 2.86, "high_price": 2.90, "low_price": 2.80},
+        {"trade_date": date(2026, 3, 30), "close_price": 2.84, "high_price": 2.88, "low_price": 2.79},
+        {"trade_date": date(2026, 3, 31), "close_price": 2.87, "high_price": 2.91, "low_price": 2.82},
+        {"trade_date": date(2026, 4, 1), "close_price": 2.70, "high_price": 2.72, "low_price": 2.60},
+        {"trade_date": date(2026, 4, 2), "close_price": 2.69, "high_price": 2.71, "low_price": 2.61},
+        {"trade_date": date(2026, 4, 3), "close_price": 2.63, "high_price": 2.66, "low_price": 2.52},
+    ]
+
+    points = detector.detect(price_series)
+
+    assert points[-1].point_type == "trough"
+    assert points[-1].point_date == date(2026, 4, 3)
+    assert points[-1].point_price == 2.52
+    assert points[-1].confirm_date is None
 
 
 def test_volatility_filter_drops_small_reversals() -> None:

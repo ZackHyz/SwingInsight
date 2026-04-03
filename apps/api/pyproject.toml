@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "SwingInsight backend service"
 requires-python = ">=3.12"
 dependencies = [
+  "akshare>=1.17,<2.0",
   "alembic>=1.18,<2.0",
   "fastapi>=0.118,<1.0",
   "httpx>=0.28,<1.0",

@@ -5,6 +5,7 @@ from pathlib import Path
 import sys
 
 from sqlalchemy import create_engine
+from sqlalchemy import text
 from sqlalchemy.orm import sessionmaker
 
 
@@ -547,3 +548,76 @@ def test_prediction_payload_includes_sample_forward_return_fields() -> None:
     assert sample["return_3d"] is not None
     assert sample["return_5d"] is not None
     assert sample["return_10d"] is not None
+
+
+def test_prediction_service_uses_pattern_similarity_when_pattern_windows_exist() -> None:
+    from swinginsight.services.pattern_feature_service import PatternFeatureService
+    from swinginsight.services.pattern_window_service import PatternWindowService
+    from swinginsight.services.prediction_service import PredictionService
+
+    session = build_session()
+    seed_prediction_context(session)
+
+    for stock_code in {"000001", "600157"}:
+        PatternWindowService(session).build_windows(stock_code=stock_code)
+        PatternFeatureService(session).materialize(stock_code=stock_code)
+        PatternWindowService(session).materialize_future_stats(stock_code=stock_code)
+
+    result = PredictionService(session).predict("000001", date(2024, 6, 28))
+
+    assert result.similar_cases
+    assert result.group_stat["sample_count"] >= 1
+    assert result.query_window is not None
+    assert result.query_window["start_date"] is not None
+    assert result.query_window["end_date"] is not None
+    assert result.query_window["window_size"] == 7
+    assert result.similar_cases[0].window_id is not None
+    assert result.similar_cases[0].window_start_date is not None
+    assert result.similar_cases[0].window_end_date is not None
+    assert result.similar_cases[0].candle_score is not None
+    assert result.similar_cases[0].trend_score is not None
+    assert result.similar_cases[0].vola_score is not None
+
+
+def test_prediction_service_falls_back_after_pattern_query_error(monkeypatch) -> None:
+    from swinginsight.services import pattern_similarity_service as pattern_similarity_module
+    from swinginsight.services.prediction_service import PredictionService
+
+    class BrokenPatternSimilarityService:
+        def __init__(self, session) -> None:
+            self.session = session
+
+        def find_similar_windows(self, *, current_segment, top_k=5):
+            self.session.execute(text("select * from definitely_missing_pattern_table"))
+            raise AssertionError("unreachable")
+
+    session = build_session()
+    seed_prediction_context(session)
+    monkeypatch.setattr(pattern_similarity_module, "PatternSimilarityService", BrokenPatternSimilarityService)
+
+    result = PredictionService(session).predict("000001", date(2024, 6, 28))
+
+    assert result.similar_cases
+    assert result.similar_cases[0].window_id is None
+    assert result.group_stat["sample_count"] >= 1
+
+
+def test_prediction_payload_includes_query_window_when_pattern_similarity_used() -> None:
+    from swinginsight.api.routes.predictions import get_prediction_payload
+    from swinginsight.services.pattern_feature_service import PatternFeatureService
+    from swinginsight.services.pattern_window_service import PatternWindowService
+
+    session = build_session()
+    seed_prediction_context(session)
+
+    for stock_code in {"000001", "600157"}:
+        PatternWindowService(session).build_windows(stock_code=stock_code)
+        PatternFeatureService(session).materialize(stock_code=stock_code)
+        PatternWindowService(session).materialize_future_stats(stock_code=stock_code)
+
+    payload = get_prediction_payload(session, "000001", date(2024, 6, 28))
+
+    assert payload["query_window"] is not None
+    assert payload["query_window"]["start_date"] is not None
+    assert payload["query_window"]["end_date"] is not None
+    assert payload["query_window"]["window_size"] == 7

@@ -3,10 +3,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date, timedelta
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from swinginsight.db.base import Base
 from swinginsight.db.models.market_data import DailyPrice
+from swinginsight.db.models.pattern import PatternFeature, PatternFutureStat, PatternMatchResult, PatternWindow
 from swinginsight.db.models.prediction import PredictionResult
 from swinginsight.db.models.segment import SwingSegment
 from swinginsight.db.models.stock import StockBasic
@@ -18,13 +21,16 @@ from swinginsight.jobs.process_news import process_news
 from swinginsight.jobs.align_news import align_news
 from swinginsight.services.feature_materialization_service import materialize_segment_features
 from swinginsight.services.manual_turning_point_service import MANUAL_VERSION_CODE
+from swinginsight.services.pattern_feature_service import PatternFeatureService
 from swinginsight.services.prediction_service import PredictionService
+from swinginsight.services.pattern_window_service import PatternWindowService
 from swinginsight.services.segment_generation_service import SegmentGenerationService
 from swinginsight.services.turning_point_service import TurningPointService
 
 
 RESEARCH_LOOKBACK_DAYS = 730
 RESEARCH_REFRESH_BUFFER_DAYS = 45
+RESEARCH_NEWS_REFRESH_DAYS = 14
 
 
 @dataclass(slots=True, frozen=True)
@@ -56,17 +62,23 @@ class StockResearchService:
 
     def ensure_stock_ready(self, stock_code: str) -> bool:
         latest_trade_date_before_refresh = self._load_latest_trade_date(stock_code)
-        import_result = self._refresh_live_prices(stock_code, latest_trade_date=latest_trade_date_before_refresh)
+        try:
+            import_result = self._refresh_live_prices(stock_code, latest_trade_date=latest_trade_date_before_refresh)
+        except IntegrityError:
+            self.session.rollback()
+            import_result = ImportResult()
         self.session.commit()
         latest_trade_date = self._load_latest_trade_date(stock_code)
         if latest_trade_date is None:
             return False
         self.session.commit()
+        needs_rebuild = self._needs_rebuild(stock_code=stock_code, latest_trade_date=latest_trade_date)
+        has_live_price_updates = self._has_live_price_updates(import_result)
 
         news_refresh = self._refresh_news_window(stock_code=stock_code, anchor_date=latest_trade_date)
         self.session.expire_all()
 
-        if self._needs_rebuild(stock_code=stock_code, latest_trade_date=latest_trade_date) or self._has_live_price_updates(import_result):
+        if needs_rebuild or has_live_price_updates:
             self._rebuild_research_artifacts(stock_code=stock_code, latest_trade_date=latest_trade_date)
         elif self._has_news_updates(news_refresh):
             self._refresh_news_features(
@@ -74,6 +86,11 @@ class StockResearchService:
                 latest_trade_date=latest_trade_date,
                 window_start=news_refresh.start_date,
             )
+
+        self._ensure_pattern_similarity_artifacts(
+            stock_code=stock_code,
+            force_refresh=needs_rebuild or has_live_price_updates,
+        )
 
         self.session.flush()
         return self._stock_exists(stock_code)
@@ -108,19 +125,30 @@ class StockResearchService:
         return import_result.inserted > 0 or import_result.updated > 0
 
     def _refresh_news_window(self, *, stock_code: str, anchor_date: date) -> NewsRefreshResult:
-        window_start, window_end = resolve_news_refresh_window(end=anchor_date)
-        inserted = import_news(stock_code=stock_code, start=window_start, end=window_end, session=self.session)
-        processing = process_news(stock_code=stock_code, start=window_start, end=window_end, session=self.session)
-        alignment = align_news(stock_code=stock_code, start=window_start, end=window_end, session=self.session)
-        return NewsRefreshResult(
-            start_date=window_start,
-            end_date=window_end,
-            inserted=inserted,
-            processed_count=processing.processed_count,
-            duplicates=processing.duplicates,
-            point_mappings=alignment.point_mappings,
-            segment_mappings=alignment.segment_mappings,
+        window_start, window_end = resolve_news_refresh_window(
+            start=anchor_date - timedelta(days=RESEARCH_NEWS_REFRESH_DAYS),
+            end=anchor_date,
         )
+        for attempt in range(2):
+            try:
+                inserted = import_news(stock_code=stock_code, start=window_start, end=window_end, session=self.session)
+                processing = process_news(stock_code=stock_code, start=window_start, end=window_end, session=self.session)
+                alignment = align_news(stock_code=stock_code, start=window_start, end=window_end, session=self.session)
+                return NewsRefreshResult(
+                    start_date=window_start,
+                    end_date=window_end,
+                    inserted=inserted,
+                    processed_count=processing.processed_count,
+                    duplicates=processing.duplicates,
+                    point_mappings=alignment.point_mappings,
+                    segment_mappings=alignment.segment_mappings,
+                )
+            except IntegrityError:
+                self.session.rollback()
+                if attempt == 1:
+                    raise
+
+        raise RuntimeError("news refresh retry loop exited unexpectedly")
 
     def _has_news_updates(self, result: NewsRefreshResult) -> bool:
         return result.inserted > 0 or result.processed_count > 0 or result.point_mappings > 0 or result.segment_mappings > 0
@@ -141,6 +169,7 @@ class StockResearchService:
             materialize_segment_features(self.session, segment.id)
 
         if segments:
+            self._ensure_pattern_similarity_artifacts(stock_code=stock_code, force_refresh=False)
             PredictionService(self.session).predict(stock_code, latest_trade_date)
 
     def _rebuild_research_artifacts(self, *, stock_code: str, latest_trade_date) -> None:
@@ -165,6 +194,7 @@ class StockResearchService:
             materialize_segment_features(self.session, segment.id)
 
         if rebuilt_segments:
+            self._ensure_pattern_similarity_artifacts(stock_code=stock_code, force_refresh=True)
             PredictionService(self.session).predict(stock_code, latest_trade_date)
 
     def _resolve_segment_version_code(self, *, stock_code: str, fallback_version: str) -> str:
@@ -188,3 +218,48 @@ class StockResearchService:
 
     def _load_latest_trade_date(self, stock_code: str):
         return self.session.scalar(select(func.max(DailyPrice.trade_date)).where(DailyPrice.stock_code == stock_code))
+
+    def _ensure_pattern_similarity_artifacts(self, *, stock_code: str, force_refresh: bool) -> None:
+        bind = self.session.get_bind()
+        Base.metadata.create_all(
+            bind=bind,
+            tables=[
+                PatternWindow.__table__,
+                PatternFeature.__table__,
+                PatternFutureStat.__table__,
+                PatternMatchResult.__table__,
+            ],
+            checkfirst=True,
+        )
+
+        if not force_refresh and not self._pattern_artifacts_missing(stock_code=stock_code):
+            return
+
+        pattern_window_service = PatternWindowService(self.session)
+        pattern_window_service.build_windows(stock_code=stock_code)
+        PatternFeatureService(self.session).materialize(stock_code=stock_code)
+        pattern_window_service.materialize_future_stats(stock_code=stock_code)
+
+    def _pattern_artifacts_missing(self, *, stock_code: str) -> bool:
+        pattern_window_id = self.session.scalar(
+            select(PatternWindow.id).where(PatternWindow.stock_code == stock_code).limit(1)
+        )
+        if pattern_window_id is None:
+            return True
+
+        has_feature = self.session.scalar(
+            select(PatternFeature.id)
+            .join(PatternWindow, PatternWindow.id == PatternFeature.window_id)
+            .where(PatternWindow.stock_code == stock_code)
+            .limit(1)
+        )
+        if has_feature is None:
+            return True
+
+        has_future_stat = self.session.scalar(
+            select(PatternFutureStat.id)
+            .join(PatternWindow, PatternWindow.id == PatternFutureStat.window_id)
+            .where(PatternWindow.stock_code == stock_code)
+            .limit(1)
+        )
+        return has_future_stat is None

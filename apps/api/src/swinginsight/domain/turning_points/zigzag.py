@@ -87,11 +87,55 @@ class ZigZagDetector:
                     )
                 )
 
+        self._extend_last_confirmed_point(price_series=price_series, confirmed=confirmed)
         final_point = self._build_terminal_point(price_series=price_series, confirmed=confirmed)
         if final_point is not None:
             confirmed.append(final_point)
 
         return confirmed
+
+    def _extend_last_confirmed_point(
+        self, *, price_series: list[dict[str, object]], confirmed: list[DetectedTurningPoint]
+    ) -> None:
+        if not confirmed or not price_series:
+            return
+
+        previous = confirmed[-1]
+        replacement_date: date | None = None
+        replacement_price = previous.point_price
+
+        for row in price_series:
+            trade_date = row["trade_date"]
+            if not isinstance(trade_date, date):
+                raise TypeError("trade_date must be a date")
+            if trade_date <= previous.point_date:
+                continue
+
+            if previous.point_type == "peak":
+                candidate_price = self._price_value(row, "high_price")
+                if candidate_price > replacement_price:
+                    replacement_date = trade_date
+                    replacement_price = candidate_price
+            else:
+                candidate_price = self._price_value(row, "low_price")
+                if candidate_price < replacement_price:
+                    replacement_date = trade_date
+                    replacement_price = candidate_price
+
+        if replacement_date is None:
+            return
+
+        confirmed[-1] = DetectedTurningPoint(
+            point_date=replacement_date,
+            point_type=previous.point_type,
+            point_price=replacement_price,
+            confirm_date=self._find_confirm_date(
+                price_series=price_series,
+                point_date=replacement_date,
+                point_price=replacement_price,
+                point_type=previous.point_type,
+            ),
+        )
 
     def _find_confirm_date(
         self,
@@ -144,5 +188,11 @@ class ZigZagDetector:
             point_date=trade_date,
             point_type=point_type,
             point_price=close_price,
-            confirm_date=trade_date,
+            confirm_date=None,
         )
+
+    def _price_value(self, row: dict[str, object], field_name: str) -> float:
+        raw_value = row.get(field_name)
+        if raw_value is None:
+            raw_value = row["close_price"]
+        return float(raw_value)

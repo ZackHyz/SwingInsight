@@ -67,6 +67,12 @@ function buildData(): StockResearchData {
           segment_id: 12,
           stock_code: "000001",
           score: 0.91,
+          price_score: 0.88,
+          candle_score: 0.93,
+          volume_score: 0.74,
+          turnover_score: 0.66,
+          trend_score: 0.71,
+          vola_score: 0.69,
           pct_change: 22.5,
           return_1d: 0.012,
           return_3d: 0.034,
@@ -74,8 +80,25 @@ function buildData(): StockResearchData {
           return_10d: 0.086,
           start_date: "2024-02-01",
           end_date: "2024-02-20",
+          window_id: 21,
+          window_start_date: "2024-02-05",
+          window_end_date: "2024-02-13",
+          window_size: 7,
+          segment_start_date: "2024-02-01",
+          segment_end_date: "2024-02-20",
         },
       ],
+      group_stat: {
+        sample_count: 20,
+        future_1d_mean: -0.0182,
+        future_1d_median: -0.011,
+        future_1d_win_rate: 0.35,
+        future_3d_mean: -0.0355,
+        future_5d_mean: -0.0476,
+        future_10d_mean: 0.0091,
+        future_5d_max_dd_median: -0.064,
+        future_10d_max_dd_median: -0.082,
+      },
     },
   };
 }
@@ -109,10 +132,20 @@ describe("prediction panel", () => {
     expect(scoped.getByText("当前状态: 主升初期")).toBeTruthy();
     expect(scoped.getByText("同股优先相似样本")).toBeTruthy();
     expect(scoped.getByText(/会优先展示当前股票历史上最接近的波段样本/)).toBeTruthy();
+    expect(scoped.getByText("相似样本数 20")).toBeTruthy();
+    expect(scoped.getByText("1日均值 -1.82%")).toBeTruthy();
+    expect(scoped.getByText("1日胜率 35.0%")).toBeTruthy();
+    expect(scoped.getByText("5日均值 -4.76%")).toBeTruthy();
+    expect(scoped.getByText("10日均值 +0.91%")).toBeTruthy();
     expect(items.at(-1)?.textContent).toContain("样本股票 000001");
-    expect(items.at(-1)?.textContent).toContain("时间段 2024-02-01 至 2024-02-20");
+    expect(items.at(-1)?.textContent).toContain("相似窗口：2024-02-05 至 2024-02-13");
+    expect(items.at(-1)?.textContent).toContain("所属波段：2024-02-01 至 2024-02-20");
     expect(items.at(-1)?.textContent).toContain("相似度 91.0%");
     expect(items.at(-1)?.textContent).toContain("样本区间涨跌幅 +22.50%");
+    expect(items.at(-1)?.textContent).toContain("价格相似 88.0%");
+    expect(items.at(-1)?.textContent).toContain("K线形态相似 93.0%");
+    expect(items.at(-1)?.textContent).toContain("趋势背景相似 71.0%");
+    expect(items.at(-1)?.textContent).toContain("波动率相似 69.0%");
     expect(items.at(-1)?.textContent).toContain("样本后续1日涨跌幅 +1.20%");
     expect(items.at(-1)?.textContent).toContain("样本后续3日涨跌幅 +3.40%");
     expect(items.at(-1)?.textContent).toContain("样本后续5日涨跌幅 -2.80%");

@@ -92,8 +92,15 @@ def test_rule_classifier_maps_business_categories() -> None:
     earnings = classify_title("2025年业绩预告同比扭亏")
     contract = classify_title("签署重大订单协议")
     risk = classify_title("异常波动及风险提示公告")
+    disclosure = classify_title("包钢股份关于召开2026年第一次临时股东会的通知", source_type="announcement")
+    resolution = classify_title("包钢股份第七届董事会第四十三次会议决议公告", source_type="announcement")
+    material = classify_title("包钢股份2026年第一次临时股东会材料", source_type="announcement")
 
     assert earnings.category == "announcement"
     assert earnings.sub_category == "earnings"
     assert contract.sub_category == "order_contract"
     assert risk.sub_category == "risk_alert"
+    assert disclosure.category == "announcement"
+    assert disclosure.sub_category == "governance"
+    assert resolution.sub_category == "governance"
+    assert material.sub_category == "governance"

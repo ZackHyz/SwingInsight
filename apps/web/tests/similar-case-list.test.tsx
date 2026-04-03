@@ -69,6 +69,9 @@ describe("similar case list", () => {
             volume_score: 0.864,
             turnover_score: 0.742,
             pattern_score: 0.901,
+            candle_score: 0.901,
+            trend_score: 0.688,
+            vola_score: 0.744,
             pct_change: 12.36,
             return_1d: 0.015,
             return_3d: -0.022,
@@ -76,6 +79,12 @@ describe("similar case list", () => {
             return_10d: 0.126,
             start_date: "2025-08-01",
             end_date: "2025-09-12",
+            window_id: 301,
+            window_start_date: "2025-08-01",
+            window_end_date: "2025-08-07",
+            window_size: 7,
+            segment_start_date: "2025-08-01",
+            segment_end_date: "2025-09-12",
           },
         ]}
       />
@@ -83,14 +92,17 @@ describe("similar case list", () => {
 
     expect(screen.getByText("同股优先相似样本")).toBeTruthy();
     expect(screen.getByText(/会优先展示当前股票历史上最接近的波段样本/)).toBeTruthy();
-    expect(screen.getByText(/相似率综合了价格、成交量、换手率和最近 10 根 K 线组合形态/)).toBeTruthy();
+    expect(screen.getByText(/相似率综合了价格、K线形态、成交量、换手率、趋势背景和波动率/)).toBeTruthy();
     expect(screen.getByText(/样本股票 600157/)).toBeTruthy();
-    expect(screen.getByText(/时间段 2025-08-01 至 2025-09-12/)).toBeTruthy();
+    expect(screen.getByText(/相似窗口：2025-08-01 至 2025-08-07/)).toBeTruthy();
+    expect(screen.getByText(/所属波段：2025-08-01 至 2025-09-12/)).toBeTruthy();
     expect(screen.getByText(/相似度 83.4%/)).toBeTruthy();
     expect(screen.getByText(/价格相似 78.1%/)).toBeTruthy();
     expect(screen.getByText(/成交量相似 86.4%/)).toBeTruthy();
     expect(screen.getByText(/换手率相似 74.2%/)).toBeTruthy();
     expect(screen.getByText(/K线形态相似 90.1%/)).toBeTruthy();
+    expect(screen.getByText(/趋势背景相似 68.8%/)).toBeTruthy();
+    expect(screen.getByText(/波动率相似 74.4%/)).toBeTruthy();
     expect(screen.getByText(/样本区间涨跌幅 \+12.36%/)).toBeTruthy();
     expect(screen.getByText(/样本后续1日涨跌幅 \+1.50%/)).toBeTruthy();
     expect(screen.getByText(/样本后续3日涨跌幅 -2.20%/)).toBeTruthy();
@@ -113,6 +125,11 @@ describe("similar case list", () => {
             pct_change: 12.36,
             start_date: "2025-08-01",
             end_date: "2025-09-12",
+            window_id: 301,
+            window_start_date: "2025-08-01",
+            window_end_date: "2025-08-07",
+            segment_start_date: "2025-08-01",
+            segment_end_date: "2025-09-12",
           },
           {
             segment_id: 18,
@@ -121,6 +138,11 @@ describe("similar case list", () => {
             pct_change: -8.4,
             start_date: "2024-12-19",
             end_date: "2025-01-13",
+            window_id: 302,
+            window_start_date: "2024-12-19",
+            window_end_date: "2024-12-27",
+            segment_start_date: "2024-12-19",
+            segment_end_date: "2025-01-13",
           },
         ]}
       />
@@ -134,14 +156,14 @@ describe("similar case list", () => {
     await waitFor(() => {
       expect(screen.getByRole("dialog", { name: "样本 12 K线对比" })).toBeTruthy();
     });
-    expect(screen.getByText("当前走势")).toBeTruthy();
-    expect(screen.getByText("历史样本")).toBeTruthy();
+    expect(screen.getByText("当前相似窗口")).toBeTruthy();
+    expect(screen.getByText("历史相似窗口")).toBeTruthy();
     expect(screen.getAllByTestId("kline-canvas")).toHaveLength(2);
     expect(screen.queryByRole("button", { name: "放大" })).toBeNull();
     expect(screen.queryByRole("button", { name: "缩小" })).toBeNull();
   });
 
-  it("normalizes compare windows so both charts use the same context span", async () => {
+  it("keeps each chart window intact instead of trimming historical context to match current", async () => {
     const currentChartWindow = {
       segment: {
         id: 0,
@@ -212,6 +234,11 @@ describe("similar case list", () => {
             pct_change: -4.23,
             start_date: "2025-08-01",
             end_date: "2025-08-06",
+            window_id: 401,
+            window_start_date: "2025-08-01",
+            window_end_date: "2025-08-06",
+            segment_start_date: "2025-08-01",
+            segment_end_date: "2025-08-06",
           },
         ]}
       />
@@ -223,12 +250,12 @@ describe("similar case list", () => {
       expect(screen.getByRole("dialog", { name: "样本 12 K线对比" })).toBeTruthy();
     });
 
-    const currentSection = screen.getByText("当前走势").closest("section");
-    const historicalSection = screen.getByText("历史样本").closest("section");
+    const currentSection = screen.getByText("当前相似窗口").closest("section");
+    const historicalSection = screen.getByText("历史相似窗口").closest("section");
 
     expect(currentSection).toBeTruthy();
     expect(historicalSection).toBeTruthy();
     expect(currentSection?.querySelectorAll('[data-testid="candlestick-body"]')).toHaveLength(7);
-    expect(historicalSection?.querySelectorAll('[data-testid="candlestick-body"]')).toHaveLength(7);
+    expect(historicalSection?.querySelectorAll('[data-testid="candlestick-body"]')).toHaveLength(11);
   });
 });

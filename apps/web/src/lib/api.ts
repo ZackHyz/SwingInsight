@@ -25,6 +25,9 @@ export type SimilarCase = {
   volume_score?: number;
   turnover_score?: number;
   pattern_score?: number;
+  candle_score?: number | null;
+  trend_score?: number | null;
+  vola_score?: number | null;
   pct_change: number | null;
   return_1d?: number | null;
   return_3d?: number | null;
@@ -32,6 +35,20 @@ export type SimilarCase = {
   return_10d?: number | null;
   start_date?: string;
   end_date?: string;
+  window_id?: number | null;
+  window_start_date?: string | null;
+  window_end_date?: string | null;
+  window_size?: number | null;
+  segment_start_date?: string | null;
+  segment_end_date?: string | null;
+};
+
+export type QueryWindow = {
+  window_id?: number | null;
+  segment_id?: number | null;
+  start_date: string;
+  end_date: string;
+  window_size?: number | null;
 };
 
 export type SegmentChartWindowData = {
@@ -75,7 +92,15 @@ export type StockResearchData = {
     title: string;
     summary: string | null;
     source_name: string | null;
+    source_type?: string | null;
     news_date: string | null;
+    category?: string | null;
+    sub_category?: string | null;
+    sentiment?: string | null;
+    display_tags?: string[];
+    sentiment_score_adjusted?: number | null;
+    event_types?: string[];
+    event_conflict_flag?: boolean;
   }>;
   current_state: {
     label: string;
@@ -84,6 +109,28 @@ export type StockResearchData = {
     key_features?: Record<string, number>;
     risk_flags?: Record<string, string>;
     similar_cases?: SimilarCase[];
+    query_window?: QueryWindow | null;
+    group_stat?: {
+      sample_count?: number;
+      future_1d_mean?: number;
+      future_1d_median?: number;
+      future_1d_win_rate?: number;
+      future_3d_mean?: number;
+      future_5d_mean?: number;
+      future_10d_mean?: number;
+      future_5d_max_dd_median?: number;
+      future_10d_max_dd_median?: number;
+    };
+    news_summary?: {
+      window_news_count?: number;
+      announcement_count?: number;
+      positive_news_ratio?: number;
+      high_heat_count?: number;
+      avg_adjusted_sentiment?: number;
+      positive_event_count?: number;
+      negative_event_count?: number;
+      governance_event_count?: number;
+    };
   };
 };
 
@@ -172,6 +219,8 @@ export type PredictionData = {
   probabilities: Record<string, number>;
   key_features: Record<string, number>;
   risk_flags: Record<string, string>;
+  query_window?: QueryWindow | null;
+  group_stat?: StockResearchData["current_state"]["group_stat"];
   similar_cases: SimilarCase[];
 };
 

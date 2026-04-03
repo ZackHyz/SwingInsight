@@ -19,7 +19,7 @@ class SwingSegment(TimestampMixin, Base):
     )
 
     id: Mapped[int] = mapped_column(BIGINT_TYPE, primary_key=True, autoincrement=True)
-    segment_uid: Mapped[str] = mapped_column(String(64), nullable=False)
+    segment_uid: Mapped[str] = mapped_column(String(128), nullable=False)
     stock_code: Mapped[str] = mapped_column(String(16), nullable=False)
     start_point_id: Mapped[int | None] = mapped_column(BIGINT_TYPE)
     end_point_id: Mapped[int | None] = mapped_column(BIGINT_TYPE)

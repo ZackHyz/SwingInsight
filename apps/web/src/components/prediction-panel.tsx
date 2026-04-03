@@ -1,5 +1,5 @@
 import { SimilarCaseList } from "./similar-case-list";
-import type { ApiClient, SegmentChartWindowData, StockResearchData } from "../lib/api";
+import type { ApiClient, QueryWindow, SegmentChartWindowData, StockResearchData } from "../lib/api";
 
 type PredictionPanelProps = {
   apiClient: Pick<ApiClient, "getSegmentChartWindow">;
@@ -51,7 +51,10 @@ function buildCurrentChartWindow({
   prices,
   autoPoints,
   finalPoints,
-}: Pick<PredictionPanelProps, "stockCode" | "prices" | "autoPoints" | "finalPoints">): SegmentChartWindowData | null {
+  queryWindow,
+}: Pick<PredictionPanelProps, "stockCode" | "prices" | "autoPoints" | "finalPoints"> & {
+  queryWindow?: QueryWindow | null;
+}): SegmentChartWindowData | null {
   if (prices.length === 0) {
     return null;
   }
@@ -61,7 +64,18 @@ function buildCurrentChartWindow({
   let highlightStartDate = prices[Math.max(prices.length - 2, 0)].trade_date;
   let highlightEndDate = prices[prices.length - 1].trade_date;
 
-  if (finalPoints.length >= 2) {
+  if (queryWindow !== undefined && queryWindow !== null) {
+    const startIndex = prices.findIndex((row) => row.trade_date === queryWindow.start_date);
+    const endIndex = prices.findIndex((row) => row.trade_date === queryWindow.end_date);
+    if (startIndex !== -1 && endIndex !== -1) {
+      const leftIndex = Math.min(startIndex, endIndex);
+      const rightIndex = Math.max(startIndex, endIndex);
+      windowStartIndex = Math.max(leftIndex - CONTEXT_TRADING_DAYS, 0);
+      windowEndIndex = Math.min(rightIndex + CONTEXT_TRADING_DAYS + 1, prices.length);
+      highlightStartDate = prices[leftIndex].trade_date;
+      highlightEndDate = prices[rightIndex].trade_date;
+    }
+  } else if (finalPoints.length >= 2) {
     const startPoint = finalPoints[finalPoints.length - 2];
     const endPoint = finalPoints[finalPoints.length - 1];
     const startIndex = prices.findIndex((row) => row.trade_date === startPoint.point_date);
@@ -97,12 +111,33 @@ function buildCurrentChartWindow({
   };
 }
 
+function formatSignedPercent(value?: number) {
+  if (value === undefined || value === null) {
+    return "--";
+  }
+  return `${value >= 0 ? "+" : ""}${(value * 100).toFixed(2)}%`;
+}
+
+function formatPercent(value?: number) {
+  if (value === undefined || value === null) {
+    return "--";
+  }
+  return `${(value * 100).toFixed(1)}%`;
+}
+
 export function PredictionPanel({ apiClient, stockCode, prices, autoPoints, finalPoints, currentState }: PredictionPanelProps) {
   const probabilities = currentState.probabilities ?? {};
   const keyFeatures = currentState.key_features ?? {};
   const riskFlags = currentState.risk_flags ?? {};
   const similarCases = currentState.similar_cases ?? [];
-  const currentChartWindow = buildCurrentChartWindow({ stockCode, prices, autoPoints, finalPoints });
+  const groupStat = currentState.group_stat;
+  const currentChartWindow = buildCurrentChartWindow({
+    stockCode,
+    prices,
+    autoPoints,
+    finalPoints,
+    queryWindow: currentState.query_window,
+  });
 
   return (
     <aside>
@@ -139,6 +174,20 @@ export function PredictionPanel({ apiClient, stockCode, prices, autoPoints, fina
           ))}
         </ul>
       </section>
+      {groupStat === undefined ? null : (
+        <section>
+          <h3>相似样本统计</h3>
+          <ul>
+            <li>相似样本数 {groupStat.sample_count ?? 0}</li>
+            <li>1日均值 {formatSignedPercent(groupStat.future_1d_mean)}</li>
+            <li>1日中位数 {formatSignedPercent(groupStat.future_1d_median)}</li>
+            <li>1日胜率 {formatPercent(groupStat.future_1d_win_rate)}</li>
+            <li>3日均值 {formatSignedPercent(groupStat.future_3d_mean)}</li>
+            <li>5日均值 {formatSignedPercent(groupStat.future_5d_mean)}</li>
+            <li>10日均值 {formatSignedPercent(groupStat.future_10d_mean)}</li>
+          </ul>
+        </section>
+      )}
       <SimilarCaseList
         items={similarCases}
         currentChartWindow={currentChartWindow}

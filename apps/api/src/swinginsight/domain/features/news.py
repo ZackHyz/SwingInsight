@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from collections.abc import Sequence
 
+
 @dataclass(slots=True, frozen=True)
 class NewsFeatureItem:
     relation_type: str
@@ -11,6 +12,9 @@ class NewsFeatureItem:
     category: str | None = None
     heat_level: str | None = None
     sub_category: str | None = None
+    sentiment_score_adjusted: float | None = None
+    event_conflict_flag: bool = False
+    event_types: list[str] | None = None
 
 
 def compute_news_features(items: Sequence[NewsFeatureItem]) -> dict[str, float]:
@@ -26,6 +30,10 @@ def compute_news_features(items: Sequence[NewsFeatureItem]) -> dict[str, float]:
             "high_heat_news_ratio": 0.0,
             "has_earnings_event": 0.0,
             "has_risk_alert": 0.0,
+            "avg_adjusted_sentiment_before_trough_5d": 0.0,
+            "avg_adjusted_sentiment_after_peak_5d": 0.0,
+            "conflicting_event_ratio": 0.0,
+            "capital_action_risk_flag": 0.0,
         }
 
     before_trough = sum(1 for item in items if item.relation_type == "before_trough")
@@ -37,8 +45,15 @@ def compute_news_features(items: Sequence[NewsFeatureItem]) -> dict[str, float]:
     positive_count = sum(1 for item in items if item.sentiment == "positive")
     duplicate_count = sum(1 for item in items if item.is_duplicate)
     high_heat_count = sum(1 for item in items if item.heat_level == "high")
-    has_earnings_event = any(item.sub_category == "earnings" for item in items)
-    has_risk_alert = any(item.sub_category == "risk_alert" for item in items)
+    has_earnings_event = any(item.sub_category == "earnings" or "earnings" in (item.event_types or []) for item in items)
+    has_risk_alert = any(item.sub_category == "risk_alert" or "risk_alert" in (item.event_types or []) for item in items)
+    adjusted_before_trough = [item.sentiment_score_adjusted for item in items if item.relation_type == "before_trough" and item.sentiment_score_adjusted is not None]
+    adjusted_after_peak = [item.sentiment_score_adjusted for item in items if item.relation_type == "after_peak" and item.sentiment_score_adjusted is not None]
+    conflicting_count = sum(1 for item in items if item.event_conflict_flag)
+    capital_action_risk_flag = any(
+        item.relation_type == "after_peak" and "capital_action" in (item.event_types or [])
+        for item in items
+    )
 
     return {
         "news_count_before_trough_5d": float(before_trough),
@@ -50,4 +65,12 @@ def compute_news_features(items: Sequence[NewsFeatureItem]) -> dict[str, float]:
         "high_heat_news_ratio": high_heat_count / total,
         "has_earnings_event": 1.0 if has_earnings_event else 0.0,
         "has_risk_alert": 1.0 if has_risk_alert else 0.0,
+        "avg_adjusted_sentiment_before_trough_5d": round(sum(adjusted_before_trough) / len(adjusted_before_trough), 4)
+        if adjusted_before_trough
+        else 0.0,
+        "avg_adjusted_sentiment_after_peak_5d": round(sum(adjusted_after_peak) / len(adjusted_after_peak), 4)
+        if adjusted_after_peak
+        else 0.0,
+        "conflicting_event_ratio": conflicting_count / total,
+        "capital_action_risk_flag": 1.0 if capital_action_risk_flag else 0.0,
     }

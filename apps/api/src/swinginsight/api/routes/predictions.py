@@ -21,6 +21,15 @@ def _serialize_similar_case(case: SimilarCase) -> dict[str, object]:
         "volume_score": case.volume_score,
         "turnover_score": case.turnover_score,
         "pattern_score": case.pattern_score,
+        "candle_score": case.candle_score,
+        "trend_score": case.trend_score,
+        "vola_score": case.vola_score,
+        "window_id": case.window_id,
+        "window_start_date": case.window_start_date.isoformat() if case.window_start_date else None,
+        "window_end_date": case.window_end_date.isoformat() if case.window_end_date else None,
+        "window_size": case.window_size,
+        "segment_start_date": case.segment_start_date.isoformat() if case.segment_start_date else None,
+        "segment_end_date": case.segment_end_date.isoformat() if case.segment_end_date else None,
         "pct_change": case.pct_change,
         "start_date": case.start_date.isoformat(),
         "end_date": case.end_date.isoformat(),
@@ -52,6 +61,8 @@ def get_prediction_payload(session: Session, stock_code: str, predict_date: date
         "key_features": result.key_features,
         "risk_flags": result.risk_flags,
         "news_summary": build_current_news_summary(session, stock_code, predict_date),
+        "group_stat": result.group_stat,
+        "query_window": _serialize_query_window(result.query_window),
         "similar_cases": [_serialize_similar_case(case) for case in result.similar_cases],
     }
 
@@ -84,6 +95,8 @@ def load_latest_prediction_summary(session: Session, stock_code: str) -> dict[st
         "key_features": result.key_features,
         "risk_flags": result.risk_flags,
         "news_summary": build_current_news_summary(session, stock_code, latest_trade_date),
+        "group_stat": result.group_stat,
+        "query_window": _serialize_query_window(result.query_window),
         "similar_cases": [_serialize_similar_case(case) for case in result.similar_cases],
     }
 
@@ -100,3 +113,17 @@ def _enrich_similar_cases(session: Session, items: list[dict[str, object]]) -> l
                 payload["end_date"] = segment.end_date.isoformat()
         enriched.append(payload)
     return enriched
+
+
+def _serialize_query_window(query_window: dict[str, object] | None) -> dict[str, object] | None:
+    if query_window is None:
+        return None
+    start_date = query_window.get("start_date")
+    end_date = query_window.get("end_date")
+    return {
+        "window_id": query_window.get("window_id"),
+        "segment_id": query_window.get("segment_id"),
+        "start_date": start_date.isoformat() if isinstance(start_date, date) else start_date,
+        "end_date": end_date.isoformat() if isinstance(end_date, date) else end_date,
+        "window_size": query_window.get("window_size"),
+    }

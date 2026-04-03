@@ -27,7 +27,14 @@ def build_session_factory():
 
 def seed_research_data(session: Session) -> None:
     from swinginsight.db.models.market_data import DailyPrice, TradeRecord
-    from swinginsight.db.models.news import NewsRaw
+    from swinginsight.db.models.news import (
+        NewsEventResult,
+        NewsProcessed,
+        NewsRaw,
+        NewsSentimentResult,
+        PointNewsMap,
+        SegmentNewsMap,
+    )
     from swinginsight.db.models.segment import SegmentFeature, SwingSegment
     from swinginsight.db.models.stock import StockBasic
     from swinginsight.db.models.prediction import PredictionResult
@@ -229,8 +236,7 @@ def seed_research_data(session: Session) -> None:
             source="test",
         )
     )
-    session.add(
-        NewsRaw(
+    news = NewsRaw(
             stock_code="000001",
             title="Liquidity support boosts banks",
             summary="Positive catalyst near the rebound",
@@ -244,6 +250,141 @@ def seed_research_data(session: Session) -> None:
             is_duplicate=False,
             data_source="test",
         )
+    recent_news = NewsRaw(
+            stock_code="000001",
+            title="Major shareholder plans reduction",
+            summary="Capital action risk after the peak",
+            content="demo",
+            publish_time=date(2024, 1, 10),
+            news_date=date(2024, 1, 10),
+            source_name="wire",
+            source_type="test",
+            sentiment="negative",
+            news_type="capital_action",
+            is_duplicate=False,
+            data_source="test",
+        )
+    session.add_all([news, recent_news])
+    session.flush()
+    session.add_all(
+        [
+            NewsProcessed(
+                news_id=news.id,
+                stock_code="000001",
+                clean_title="liquidity support boosts banks",
+                clean_summary="Positive catalyst near the rebound",
+                category="announcement",
+                sub_category="earnings",
+                sentiment="positive",
+                heat_level="medium",
+                keyword_list=["support"],
+                tag_list=["official"],
+                is_duplicate=False,
+            ),
+            NewsProcessed(
+                news_id=recent_news.id,
+                stock_code="000001",
+                clean_title="major shareholder plans reduction",
+                clean_summary="Capital action risk after the peak",
+                category="announcement",
+                sub_category="capital_action",
+                sentiment="negative",
+                heat_level="high",
+                keyword_list=["reduction"],
+                tag_list=["official"],
+                is_duplicate=False,
+            ),
+            NewsSentimentResult(
+                news_id=news.id,
+                stock_code="000001",
+                sentiment_label="positive",
+                sentiment_score_base=0.8,
+                sentiment_score_adjusted=0.8,
+                confidence_score=0.85,
+                heat_score=0.65,
+                market_context_score=0.0,
+                position_context_score=0.0,
+                event_conflict_flag=False,
+                model_version="rules:v1",
+            ),
+            NewsSentimentResult(
+                news_id=recent_news.id,
+                stock_code="000001",
+                sentiment_label="negative",
+                sentiment_score_base=-0.6,
+                sentiment_score_adjusted=-0.6,
+                confidence_score=0.8,
+                heat_score=0.8,
+                market_context_score=0.0,
+                position_context_score=0.0,
+                event_conflict_flag=False,
+                model_version="rules:v1",
+            ),
+            NewsEventResult(
+                news_id=news.id,
+                stock_code="000001",
+                sentence_index=0,
+                sentence_text="Liquidity support boosts banks",
+                event_type="earnings",
+                event_polarity="positive",
+                event_strength=4,
+                entity_main="000001",
+                trigger_keywords=["support"],
+                model_version="rules:v1",
+            ),
+            NewsEventResult(
+                news_id=recent_news.id,
+                stock_code="000001",
+                sentence_index=0,
+                sentence_text="Major shareholder plans reduction",
+                event_type="capital_action",
+                event_polarity="negative",
+                event_strength=4,
+                entity_main="000001",
+                trigger_keywords=["reduction"],
+                model_version="rules:v1",
+            ),
+            SegmentNewsMap(
+                segment_id=1,
+                news_id=news.id,
+                stock_code="000001",
+                relation_type="inside_segment",
+                window_type="segment_body",
+                anchor_date=date(2024, 1, 4),
+                distance_days=2,
+                weight_score=1.0,
+            ),
+            SegmentNewsMap(
+                segment_id=1,
+                news_id=recent_news.id,
+                stock_code="000001",
+                relation_type="after_peak",
+                window_type="point_window",
+                anchor_date=date(2024, 1, 8),
+                distance_days=2,
+                weight_score=1.0,
+            ),
+            PointNewsMap(
+                point_id=4,
+                news_id=news.id,
+                stock_code="000001",
+                point_type="peak",
+                relation_type="before_peak",
+                anchor_date=date(2024, 1, 8),
+                distance_days=-2,
+                weight_score=1.0,
+            ),
+            PointNewsMap(
+                point_id=4,
+                news_id=recent_news.id,
+                stock_code="000001",
+                point_type="peak",
+                relation_type="after_peak",
+                anchor_date=date(2024, 1, 8),
+                distance_days=2,
+                weight_score=1.0,
+            ),
+        ]
     )
     session.commit()
 
@@ -252,6 +393,7 @@ def test_get_stock_research_payload_contains_expected_sections(monkeypatch) -> N
     from fastapi.testclient import TestClient
     from swinginsight.api.main import create_app
     from swinginsight.ingest.adapters.akshare_daily_price_feed import AkshareDailyPriceFeed
+    from swinginsight.services.stock_research_service import StockResearchService
 
     session_factory = build_session_factory()
     session = session_factory()
@@ -299,6 +441,7 @@ def test_get_stock_research_payload_contains_expected_sections(monkeypatch) -> N
 
     monkeypatch.setattr(AkshareDailyPriceFeed, "fetch_stock_metadata", fake_fetch_stock_metadata)
     monkeypatch.setattr(AkshareDailyPriceFeed, "fetch_daily_prices", fake_fetch_daily_prices)
+    monkeypatch.setattr(StockResearchService, "ensure_stock_ready", lambda self, stock_code: True)
 
     app = create_app(session_factory=session_factory)
     client = TestClient(app)
@@ -314,8 +457,25 @@ def test_get_stock_research_payload_contains_expected_sections(monkeypatch) -> N
     assert payload["current_state"]["label"]
     assert len(payload["trade_markers"]) == 1
     assert payload["trade_markers"][0]["trade_type"] == "buy"
-    assert len(payload["news_items"]) == 1
-    assert payload["news_items"][0]["title"] == "Liquidity support boosts banks"
+    assert len(payload["news_items"]) == 2
+    news_by_title = {item["title"]: item for item in payload["news_items"]}
+    assert news_by_title["Liquidity support boosts banks"]["category"] == "announcement"
+    assert news_by_title["Liquidity support boosts banks"]["source_type"] == "test"
+    assert news_by_title["Liquidity support boosts banks"]["display_tags"] == ["当前波段内", "顶部前2日", "公告", "利多"]
+    assert news_by_title["Liquidity support boosts banks"]["event_types"] == ["earnings"]
+    assert news_by_title["Liquidity support boosts banks"]["event_conflict_flag"] is False
+    assert news_by_title["Liquidity support boosts banks"]["sentiment_score_adjusted"] > 0.0
+    assert news_by_title["Major shareholder plans reduction"]["event_types"] == ["capital_action"]
+    assert news_by_title["Major shareholder plans reduction"]["event_conflict_flag"] is False
+    assert news_by_title["Major shareholder plans reduction"]["sentiment_score_adjusted"] < -0.6
+    assert payload["current_state"]["news_summary"]["window_news_count"] == 2.0
+    assert payload["current_state"]["news_summary"]["announcement_count"] == 2.0
+    assert payload["current_state"]["news_summary"]["positive_news_ratio"] == 0.5
+    assert payload["current_state"]["news_summary"]["high_heat_count"] == 1.0
+    assert payload["current_state"]["news_summary"]["avg_adjusted_sentiment"] < 0.0
+    assert payload["current_state"]["news_summary"]["positive_event_count"] == 1.0
+    assert payload["current_state"]["news_summary"]["negative_event_count"] == 1.0
+    assert payload["current_state"]["news_summary"]["governance_event_count"] == 0.0
 
 
 def test_get_segment_chart_window_returns_segment_context_with_pre_and_post_trading_days() -> None:
@@ -488,6 +648,8 @@ def test_get_stock_research_payload_fetches_live_data_when_database_is_missing(m
     assert payload["stock"]["stock_code"] == "600157"
     assert payload["stock"]["stock_name"] == "永泰能源"
     assert len(payload["prices"]) == len(live_prices)
+    assert payload["final_turning_points"][-1]["point_date"] == date(2024, 1, 10).isoformat()
+    assert payload["final_turning_points"][-1]["point_type"] == "trough"
 
     verification_session = session_factory()
     stored_stock = verification_session.scalar(select(StockBasic).where(StockBasic.stock_code == "600157"))

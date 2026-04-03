@@ -17,6 +17,9 @@ from swinginsight.services.news_processing_service import NewsProcessingService
 class ProcessNewsResult:
     processed_count: int
     duplicates: int
+    sentiment_results: int = 0
+    event_results: int = 0
+    conflict_news: int = 0
 
 
 def process_news(
@@ -51,11 +54,21 @@ def process_news(
                     "start": start.isoformat() if start else None,
                     "end": end.isoformat() if end else None,
                 },
-                result_summary=f"processed={result.processed_count},duplicates={result.duplicates}",
+                result_summary=(
+                    f"processed={result.processed_count},duplicates={result.duplicates},"
+                    f"sentiment_results={result.sentiment_results},event_results={result.event_results},"
+                    f"conflict_news={result.conflict_news}"
+                ),
             )
         )
         current_session.commit()
-        return ProcessNewsResult(processed_count=result.processed_count, duplicates=result.duplicates)
+        return ProcessNewsResult(
+            processed_count=result.processed_count,
+            duplicates=result.duplicates,
+            sentiment_results=result.sentiment_results,
+            event_results=result.event_results,
+            conflict_news=result.conflict_news,
+        )
 
     if session is not None:
         return run(session)

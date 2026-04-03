@@ -21,7 +21,7 @@ def build_session():
 
 def seed_segment_context(session):
     from swinginsight.db.models.market_data import DailyPrice
-    from swinginsight.db.models.news import NewsRaw
+    from swinginsight.db.models.news import NewsEventResult, NewsProcessed, NewsRaw, NewsSentimentResult
     from swinginsight.db.models.segment import SwingSegment
 
     session.add_all(
@@ -117,6 +117,7 @@ def seed_segment_context(session):
                 publish_time=datetime(2024, 1, 2, 9, 0, tzinfo=UTC).replace(tzinfo=None),
                 news_date=date(2024, 1, 2),
                 source_name="source-a",
+                source_type="announcement",
                 sentiment="positive",
                 data_source="akshare",
                 duplicate_group_id="dup-1",
@@ -129,6 +130,7 @@ def seed_segment_context(session):
                 publish_time=datetime(2024, 1, 2, 10, 0, tzinfo=UTC).replace(tzinfo=None),
                 news_date=date(2024, 1, 2),
                 source_name="source-a",
+                source_type="announcement",
                 sentiment="positive",
                 data_source="akshare",
                 duplicate_group_id="dup-1",
@@ -142,19 +144,171 @@ def seed_segment_context(session):
                 publish_time=datetime(2024, 1, 6, 9, 0, tzinfo=UTC).replace(tzinfo=None),
                 news_date=date(2024, 1, 6),
                 source_name="source-b",
+                source_type="announcement",
                 sentiment="neutral",
                 data_source="tushare",
             ),
             NewsRaw(
                 news_uid="n4",
                 stock_code="000001",
-                title="Earnings optimism",
-                summary="Breakout catalyst",
+                title="Shareholder reduction risk",
+                summary="After peak capital action risk",
                 publish_time=datetime(2024, 1, 10, 9, 0, tzinfo=UTC).replace(tzinfo=None),
                 news_date=date(2024, 1, 10),
                 source_name="source-c",
-                sentiment="positive",
+                source_type="announcement",
+                sentiment="negative",
                 data_source="akshare",
+            ),
+        ]
+    )
+    session.flush()
+
+    news_ids = {
+        row.news_uid: row.id
+        for row in session.scalars(select(NewsRaw).where(NewsRaw.stock_code == "000001")).all()
+    }
+    session.add_all(
+        [
+            NewsProcessed(
+                news_id=news_ids["n1"],
+                stock_code="000001",
+                category="announcement",
+                sub_category="earnings",
+                sentiment="positive",
+                heat_level="medium",
+                is_duplicate=False,
+            ),
+            NewsProcessed(
+                news_id=news_ids["n2"],
+                stock_code="000001",
+                category="announcement",
+                sub_category="earnings",
+                sentiment="positive",
+                heat_level="medium",
+                is_duplicate=True,
+            ),
+            NewsProcessed(
+                news_id=news_ids["n3"],
+                stock_code="000001",
+                category="announcement",
+                sub_category="governance",
+                sentiment="positive",
+                heat_level="low",
+                is_duplicate=False,
+            ),
+            NewsProcessed(
+                news_id=news_ids["n4"],
+                stock_code="000001",
+                category="announcement",
+                sub_category="capital_action",
+                sentiment="negative",
+                heat_level="high",
+                is_duplicate=False,
+            ),
+            NewsSentimentResult(
+                news_id=news_ids["n1"],
+                stock_code="000001",
+                sentiment_label="positive",
+                sentiment_score_base=0.6,
+                sentiment_score_adjusted=0.6,
+                confidence_score=0.8,
+                heat_score=0.45,
+                market_context_score=0.0,
+                position_context_score=0.0,
+                event_conflict_flag=False,
+                model_version="rules:v1",
+                calculated_at=datetime(2024, 1, 2, 9, 5, tzinfo=UTC).replace(tzinfo=None),
+            ),
+            NewsSentimentResult(
+                news_id=news_ids["n2"],
+                stock_code="000001",
+                sentiment_label="positive",
+                sentiment_score_base=0.6,
+                sentiment_score_adjusted=0.6,
+                confidence_score=0.8,
+                heat_score=0.45,
+                market_context_score=0.0,
+                position_context_score=0.0,
+                event_conflict_flag=False,
+                model_version="rules:v1",
+                calculated_at=datetime(2024, 1, 2, 10, 5, tzinfo=UTC).replace(tzinfo=None),
+            ),
+            NewsSentimentResult(
+                news_id=news_ids["n3"],
+                stock_code="000001",
+                sentiment_label="positive",
+                sentiment_score_base=0.3,
+                sentiment_score_adjusted=0.3,
+                confidence_score=0.8,
+                heat_score=0.3,
+                market_context_score=0.0,
+                position_context_score=0.0,
+                event_conflict_flag=True,
+                model_version="rules:v1",
+                calculated_at=datetime(2024, 1, 6, 9, 5, tzinfo=UTC).replace(tzinfo=None),
+            ),
+            NewsSentimentResult(
+                news_id=news_ids["n4"],
+                stock_code="000001",
+                sentiment_label="negative",
+                sentiment_score_base=-0.6,
+                sentiment_score_adjusted=-0.6,
+                confidence_score=0.8,
+                heat_score=0.8,
+                market_context_score=0.0,
+                position_context_score=0.0,
+                event_conflict_flag=False,
+                model_version="rules:v1",
+                calculated_at=datetime(2024, 1, 10, 9, 5, tzinfo=UTC).replace(tzinfo=None),
+            ),
+            NewsEventResult(
+                news_id=news_ids["n1"],
+                stock_code="000001",
+                sentence_index=0,
+                sentence_text="Bank support policy",
+                event_type="earnings",
+                event_polarity="positive",
+                event_strength=4,
+                entity_main="000001",
+                trigger_keywords=["support"],
+                model_version="rules:v1",
+            ),
+            NewsEventResult(
+                news_id=news_ids["n3"],
+                stock_code="000001",
+                sentence_index=0,
+                sentence_text="Quarterly preview",
+                event_type="earnings",
+                event_polarity="positive",
+                event_strength=3,
+                entity_main="000001",
+                trigger_keywords=["quarterly"],
+                model_version="rules:v1",
+            ),
+            NewsEventResult(
+                news_id=news_ids["n3"],
+                stock_code="000001",
+                sentence_index=1,
+                sentence_text="Board weighs reduction",
+                event_type="capital_action",
+                event_polarity="negative",
+                event_strength=3,
+                entity_main="000001",
+                trigger_keywords=["reduction"],
+                model_version="rules:v1",
+            ),
+            NewsEventResult(
+                news_id=news_ids["n4"],
+                stock_code="000001",
+                sentence_index=0,
+                sentence_text="Shareholder reduction risk",
+                event_type="capital_action",
+                event_polarity="negative",
+                event_strength=4,
+                entity_main="000001",
+                trigger_keywords=["reduction"],
+                model_version="rules:v1",
             ),
         ]
     )
@@ -179,6 +333,16 @@ def test_materializer_persists_technical_and_news_features() -> None:
     assert "avg_turnover_rate_10d" in names
     assert "news_count_before_trough_5d" in names
     assert "duplicate_news_ratio" in names
+    assert "avg_adjusted_sentiment_before_trough_5d" in names
+    assert "avg_adjusted_sentiment_after_peak_5d" in names
+    assert "conflicting_event_ratio" in names
+    assert "capital_action_risk_flag" in names
+
+    feature_values = {row.feature_name: row.feature_value_num for row in rows}
+    assert feature_values["avg_adjusted_sentiment_before_trough_5d"] > 0.6
+    assert feature_values["avg_adjusted_sentiment_after_peak_5d"] < -0.6
+    assert feature_values["conflicting_event_ratio"] > 0.0
+    assert feature_values["capital_action_risk_flag"] == 1.0
 
     persisted = session.scalars(select(SegmentFeature).where(SegmentFeature.segment_id == segment.id)).all()
     assert len(persisted) >= 6

@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date
 from math import sqrt
+from statistics import mean, median
 
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
@@ -30,7 +31,7 @@ from swinginsight.domain.prediction.state_rules import classify_current_state
 from swinginsight.services.feature_materialization_service import materialize_segment_features
 
 
-PREDICTION_VERSION = "prediction:v1"
+PREDICTION_VERSION = "prediction:v2-pattern"
 PROBABILITY_PRIORS = {"up": 0.30, "flat": 0.25, "down": 0.45}
 PRIOR_STRENGTH = 2.0
 SEQUENCE_WINDOW = 10
@@ -66,6 +67,15 @@ class SimilarCase:
     start_date: date
     end_date: date
     forward_returns: dict[int, float | None]
+    window_id: int | None = None
+    window_start_date: date | None = None
+    window_end_date: date | None = None
+    window_size: int | None = None
+    segment_start_date: date | None = None
+    segment_end_date: date | None = None
+    candle_score: float | None = None
+    trend_score: float | None = None
+    vola_score: float | None = None
 
 
 @dataclass(slots=True, frozen=True)
@@ -84,6 +94,8 @@ class PredictionOutcome:
     flat_prob_20d: float
     down_prob_20d: float
     similar_cases: list[SimilarCase]
+    group_stat: dict[str, float]
+    query_window: dict[str, object] | None
     key_features: dict[str, float]
     risk_flags: dict[str, str]
     summary: str
@@ -353,7 +365,24 @@ class PredictionService:
 
         current_vector = self.similarity_store.load_feature_vector(current_segment.id)
         current_state = classify_current_state(current_vector)
-        similar_cases = self.similarity_store.find_top_k(current_segment=current_segment, current_vector=current_vector, k=5)
+        try:
+            from swinginsight.services.pattern_similarity_service import PatternSimilarityService
+
+            with self.session.begin_nested():
+                pattern_result = PatternSimilarityService(self.session).find_similar_windows(
+                    current_segment=current_segment,
+                    top_k=5,
+                )
+        except Exception:
+            pattern_result = None
+        if pattern_result is not None and pattern_result.similar_cases:
+            similar_cases = pattern_result.similar_cases
+            group_stat = pattern_result.group_stat
+            query_window = pattern_result.query_window
+        else:
+            similar_cases = self.similarity_store.find_top_k(current_segment=current_segment, current_vector=current_vector, k=5)
+            group_stat = self._summarize_future_returns(similar_cases)
+            query_window = None
         probabilities = self._estimate_probabilities(similar_cases)
         key_features = {
             key: value
@@ -392,10 +421,37 @@ class PredictionService:
             flat_prob_20d=probabilities["flat_20d"],
             down_prob_20d=probabilities["down_20d"],
             similar_cases=similar_cases,
+            group_stat=group_stat,
+            query_window=query_window,
             key_features=key_features,
             risk_flags=risk_flags,
             summary=summary,
         )
+
+    def _summarize_future_returns(self, similar_cases: list[SimilarCase]) -> dict[str, float]:
+        def _mean(values: list[float | None]) -> float:
+            cleaned = [float(value) for value in values if value is not None]
+            return round(mean(cleaned), 4) if cleaned else 0.0
+
+        def _median(values: list[float | None]) -> float:
+            cleaned = [float(value) for value in values if value is not None]
+            return round(median(cleaned), 4) if cleaned else 0.0
+
+        def _win_rate(values: list[float | None]) -> float:
+            cleaned = [float(value) for value in values if value is not None]
+            return round(sum(1 for value in cleaned if value > 0) / len(cleaned), 4) if cleaned else 0.0
+
+        return {
+            "sample_count": float(len(similar_cases)),
+            "future_1d_mean": _mean([case.forward_returns.get(1) for case in similar_cases]),
+            "future_1d_median": _median([case.forward_returns.get(1) for case in similar_cases]),
+            "future_1d_win_rate": _win_rate([case.forward_returns.get(1) for case in similar_cases]),
+            "future_3d_mean": _mean([case.forward_returns.get(3) for case in similar_cases]),
+            "future_5d_mean": _mean([case.forward_returns.get(5) for case in similar_cases]),
+            "future_10d_mean": _mean([case.forward_returns.get(10) for case in similar_cases]),
+            "future_5d_max_dd_median": 0.0,
+            "future_10d_max_dd_median": 0.0,
+        }
 
     def _estimate_probabilities(self, similar_cases: list[SimilarCase]) -> dict[str, float]:
         probabilities: dict[str, float] = {}
@@ -472,6 +528,15 @@ class PredictionService:
                         "volume_score": case.volume_score,
                         "turnover_score": case.turnover_score,
                         "pattern_score": case.pattern_score,
+                        "window_id": case.window_id,
+                        "window_start_date": case.window_start_date.isoformat() if case.window_start_date else None,
+                        "window_end_date": case.window_end_date.isoformat() if case.window_end_date else None,
+                        "window_size": case.window_size,
+                        "segment_start_date": case.segment_start_date.isoformat() if case.segment_start_date else None,
+                        "segment_end_date": case.segment_end_date.isoformat() if case.segment_end_date else None,
+                        "candle_score": case.candle_score,
+                        "trend_score": case.trend_score,
+                        "vola_score": case.vola_score,
                         "pct_change": case.pct_change,
                         "start_date": case.start_date.isoformat(),
                         "end_date": case.end_date.isoformat(),

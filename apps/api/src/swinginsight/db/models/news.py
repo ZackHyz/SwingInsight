@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Any
 
-from sqlalchemy import JSON, Boolean, Date, DateTime, Index, Numeric, String, Text, UniqueConstraint
+from sqlalchemy import JSON, Boolean, Date, DateTime, Index, Integer, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from swinginsight.db.base import BIGINT_TYPE, Base, CreatedAtMixin
@@ -72,6 +72,53 @@ class NewsProcessed(CreatedAtMixin, Base):
     duplicate_group_id: Mapped[str | None] = mapped_column(String(64))
     main_news_id: Mapped[int | None] = mapped_column(BIGINT_TYPE)
     processed_at: Mapped[datetime | None] = mapped_column(DateTime())
+
+
+class NewsSentimentResult(CreatedAtMixin, Base):
+    __tablename__ = "news_sentiment_result"
+    __table_args__ = (
+        UniqueConstraint("news_id"),
+        Index("ix_news_sentiment_result_news_id", "news_id"),
+        Index("ix_news_sentiment_result_stock_code", "stock_code"),
+        Index("ix_news_sentiment_result_sentiment_label", "sentiment_label"),
+    )
+
+    id: Mapped[int] = mapped_column(BIGINT_TYPE, primary_key=True, autoincrement=True)
+    news_id: Mapped[int] = mapped_column(BIGINT_TYPE, nullable=False)
+    stock_code: Mapped[str | None] = mapped_column(String(16))
+    sentiment_label: Mapped[str | None] = mapped_column(String(16))
+    sentiment_score_base: Mapped[float | None] = mapped_column(Numeric(8, 4))
+    sentiment_score_adjusted: Mapped[float | None] = mapped_column(Numeric(8, 4))
+    confidence_score: Mapped[float | None] = mapped_column(Numeric(8, 4))
+    heat_score: Mapped[float | None] = mapped_column(Numeric(8, 4))
+    market_context_score: Mapped[float | None] = mapped_column(Numeric(8, 4))
+    position_context_score: Mapped[float | None] = mapped_column(Numeric(8, 4))
+    event_conflict_flag: Mapped[bool] = mapped_column(Boolean(), nullable=False, default=False)
+    model_version: Mapped[str | None] = mapped_column(String(64))
+    calculated_at: Mapped[datetime | None] = mapped_column(DateTime())
+
+
+class NewsEventResult(CreatedAtMixin, Base):
+    __tablename__ = "news_event_result"
+    __table_args__ = (
+        UniqueConstraint("news_id", "sentence_index", "event_type"),
+        Index("ix_news_event_result_news_id", "news_id"),
+        Index("ix_news_event_result_stock_code", "stock_code"),
+        Index("ix_news_event_result_event_type", "event_type"),
+    )
+
+    id: Mapped[int] = mapped_column(BIGINT_TYPE, primary_key=True, autoincrement=True)
+    news_id: Mapped[int] = mapped_column(BIGINT_TYPE, nullable=False)
+    stock_code: Mapped[str | None] = mapped_column(String(16))
+    sentence_index: Mapped[int] = mapped_column(Integer(), nullable=False, default=0)
+    sentence_text: Mapped[str | None] = mapped_column(Text())
+    event_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    event_polarity: Mapped[str | None] = mapped_column(String(16))
+    event_strength: Mapped[int | None] = mapped_column(Integer())
+    entity_main: Mapped[str | None] = mapped_column(String(128))
+    entity_secondary: Mapped[str | None] = mapped_column(String(128))
+    trigger_keywords: Mapped[list[str] | None] = mapped_column(JSON)
+    model_version: Mapped[str | None] = mapped_column(String(64))
 
 
 class SegmentNewsMap(CreatedAtMixin, Base):

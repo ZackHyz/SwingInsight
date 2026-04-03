@@ -59,7 +59,11 @@ class TurningPointService:
         )
 
         detector = ZigZagDetector(reversal_pct=reversal_pct)
-        points = filter_by_min_separation_pct(detector.detect(prices), min_separation_pct=min_separation_pct)
+        points = [
+            point
+            for point in filter_by_min_separation_pct(detector.detect(prices), min_separation_pct=min_separation_pct)
+            if point.confirm_date is not None
+        ]
 
         self.session.execute(
             delete(TurningPoint).where(

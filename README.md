@@ -113,7 +113,78 @@ cd apps/api
 ../../.venv/bin/python -m swinginsight.jobs.cli align-news --stock-code 000001 --start 2026-03-01 --end 2026-03-31
 ```
 
+## News Sentiment V1
+
+`process-news` now emits event-level sentiment outputs into `news_sentiment_result` and `news_event_result`.
+
+```bash
+cd apps/api
+../../.venv/bin/python -m swinginsight.jobs.cli process-news --stock-code 600010 --start 2026-03-19 --end 2026-04-02
+```
+
+Example output:
+
+```text
+process-news stock_code=600010 processed=17 duplicates=0 sentiment_results=17 event_results=21 conflict_news=1
+```
+
+Quick verification queries:
+
+```sql
+select count(*) from news_sentiment_result;
+select news_id, sentiment_label, sentiment_score_base, sentiment_score_adjusted, event_conflict_flag
+from news_sentiment_result
+order by id desc
+limit 10;
+
+select news_id, event_type, event_polarity, event_strength
+from news_event_result
+order by id desc
+limit 20;
+```
+
+Research payloads also expose these V1 fields on `/stocks/{code}` news items:
+
+- `sentiment_score_adjusted`
+- `event_types`
+- `event_conflict_flag`
+
 Page-driven research requests call the same incremental pipeline automatically for the latest trading-date window, then only rematerialize overlapping segment features instead of rebuilding all historical news mappings.
+
+## Pattern Similarity V1 Operations
+
+Single-stock pattern backfill order:
+
+```bash
+cd apps/api
+../../.venv/bin/python -m swinginsight.jobs.cli rebuild-segments --stock-code 600010 --algo zigzag
+../../.venv/bin/python -m swinginsight.jobs.cli build-pattern-windows --stock-code 600010
+../../.venv/bin/python -m swinginsight.jobs.cli materialize-pattern-features --stock-code 600010
+../../.venv/bin/python -m swinginsight.jobs.cli materialize-pattern-future-stats --stock-code 600010
+```
+
+Expected CLI outputs:
+
+```text
+build-pattern-windows stock_code=600010 window_size=7 created=... updated=... skipped=...
+materialize-pattern-features stock_code=600010 windows=... features=... skipped=...
+materialize-pattern-future-stats stock_code=600010 updated=... skipped=...
+```
+
+Quick verification queries:
+
+```sql
+select count(*) from pattern_window where stock_code = '600010';
+select count(*) from pattern_feature pf join pattern_window pw on pw.id = pf.window_id where pw.stock_code = '600010';
+select count(*) from pattern_future_stat pfs join pattern_window pw on pw.id = pfs.window_id where pw.stock_code = '600010';
+```
+
+Pattern-driven prediction payloads now expose:
+
+- `query_window`
+- `group_stat`
+- per-sample `window_start_date` / `window_end_date`
+- per-sample `segment_start_date` / `segment_end_date`
 
 ## Failure Debugging
 
