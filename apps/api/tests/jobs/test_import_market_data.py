@@ -118,3 +118,39 @@ def test_import_daily_prices_uses_provider_chain_and_reports_fallback_source(mon
 
     log = session.scalars(select(TaskRunLog)).one()
     assert log.input_params_json["source"] == "tushare"
+
+
+def test_priority_daily_price_feed_delegates_stock_metadata_to_capable_provider():
+    from swinginsight.db.models.stock import StockBasic
+    from swinginsight.jobs.import_market_data import PriorityDailyPriceFeed, ensure_stock_basic
+
+    class MetadataDailyPriceFeed:
+        def __init__(self) -> None:
+            self.stock_metadata_calls: list[str] = []
+
+        def fetch_daily_prices(self, stock_code: str, start: date | None, end: date | None):
+            return []
+
+        def fetch_stock_metadata(self, stock_code: str):
+            self.stock_metadata_calls.append(stock_code)
+            return {
+                "stock_code": stock_code,
+                "stock_name": "Ping An Bank",
+                "market": "A",
+                "industry": "Bank",
+                "concept_tags": ["financial"],
+            }
+
+    session, _ = build_session()
+    provider = MetadataDailyPriceFeed()
+    feed = PriorityDailyPriceFeed([("akshare", provider)])
+
+    ensure_stock_basic(session, "000001", feed)
+
+    stock = session.scalar(select(StockBasic).where(StockBasic.stock_code == "000001"))
+    assert stock is not None
+    assert stock.stock_name == "Ping An Bank"
+    assert stock.market == "A"
+    assert stock.industry == "Bank"
+    assert stock.concept_tags == ["financial"]
+    assert provider.stock_metadata_calls == ["000001"]

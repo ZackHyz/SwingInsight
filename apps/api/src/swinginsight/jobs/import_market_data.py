@@ -37,6 +37,19 @@ class PriorityDailyPriceFeed:
         self.resolved_source_name = None
         raise RuntimeError("All daily price providers failed: " + "; ".join(errors))
 
+    def fetch_stock_metadata(self, stock_code: str):
+        for provider_name, provider in self.providers:
+            fetch_metadata = getattr(provider, "fetch_stock_metadata", None)
+            if fetch_metadata is None:
+                continue
+            try:
+                metadata = fetch_metadata(stock_code)
+            except Exception as exc:  # noqa: BLE001
+                continue
+            if metadata is not None:
+                return metadata
+        return None
+
 
 def build_daily_price_feed(*, demo: bool, settings: Settings | None = None) -> tuple[DailyPriceFeed, str]:
     if demo:
@@ -79,10 +92,23 @@ def ensure_stock_basic(session, stock_code: str, feed: object) -> None:
                     industry=None,
                     concept_tags=[],
                 )
-            )
+        )
         return
 
     metadata = fetch_metadata(stock_code)
+    if metadata is None:
+        existing = session.scalar(select(StockBasic).where(StockBasic.stock_code == stock_code))
+        if existing is None:
+            session.add(
+                StockBasic(
+                    stock_code=stock_code,
+                    stock_name=stock_code,
+                    market="A",
+                    industry=None,
+                    concept_tags=[],
+                )
+            )
+        return
     existing = session.scalar(select(StockBasic).where(StockBasic.stock_code == stock_code))
     if existing is None:
         session.add(StockBasic(**metadata))
