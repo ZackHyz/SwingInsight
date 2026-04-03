@@ -13,10 +13,12 @@ class TushareDailyPriceFeed:
         client = self._get_client()
         ts_code = self._to_ts_code(stock_code)
         rows = self._rows_from_response(
-            client.daily(
+            client.pro_bar(
                 ts_code=ts_code,
                 start_date=start.strftime("%Y%m%d") if start else None,
                 end_date=end.strftime("%Y%m%d") if end else None,
+                adj="qfq",
+                asset="E",
             )
         )
         payloads = [self._map_row(stock_code=stock_code, row=row) for row in rows]

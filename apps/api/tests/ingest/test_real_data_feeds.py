@@ -34,11 +34,11 @@ class StubHttpClient:
 
 class FakeTushareClient:
     def __init__(self) -> None:
-        self.daily_calls: list[dict[str, object]] = []
+        self.pro_bar_calls: list[dict[str, object]] = []
         self.stock_basic_calls: list[dict[str, object]] = []
 
-    def daily(self, **kwargs: object) -> list[dict[str, object]]:
-        self.daily_calls.append(kwargs)
+    def pro_bar(self, **kwargs: object) -> list[dict[str, object]]:
+        self.pro_bar_calls.append(kwargs)
         return [
             {
                 "ts_code": "600157.SH",
@@ -52,6 +52,8 @@ class FakeTushareClient:
                 "change": 0.03,
                 "pct_chg": 2.4,
                 "pre_close": 1.25,
+                "turnover_rate": 1.2,
+                "adj_factor": 1.0,
             },
             {
                 "ts_code": "600157.SH",
@@ -65,6 +67,8 @@ class FakeTushareClient:
                 "change": 0.03,
                 "pct_chg": 1.05,
                 "pre_close": 1.28,
+                "turnover_rate": 1.1,
+                "adj_factor": 1.0,
             },
         ]
 
@@ -125,7 +129,7 @@ def test_akshare_daily_price_feed_returns_metadata() -> None:
     assert metadata["market"] == "A"
 
 
-def test_tushare_daily_price_feed_uses_pro_api_daily_contract(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_tushare_daily_price_feed_uses_pro_api_qfq_contract(monkeypatch: pytest.MonkeyPatch) -> None:
     from swinginsight.ingest.adapters.tushare_daily_price_feed import TushareDailyPriceFeed
 
     fake_client = FakeTushareClient()
@@ -143,7 +147,10 @@ def test_tushare_daily_price_feed_uses_pro_api_daily_contract(monkeypatch: pytes
     assert rows[0]["trade_date"] == date(2026, 3, 30)
     assert rows[0]["close_price"] == 1.28
     assert rows[0]["data_source"] == "tushare"
-    assert fake_client.daily_calls[0]["ts_code"] == "600157.SH"
+    assert fake_client.pro_bar_calls[0]["ts_code"] == "600157.SH"
+    assert fake_client.pro_bar_calls[0]["start_date"] == "20260330"
+    assert fake_client.pro_bar_calls[0]["end_date"] == "20260331"
+    assert fake_client.pro_bar_calls[0]["adj"] == "qfq"
 
 
 def test_tushare_daily_price_feed_requires_token() -> None:
