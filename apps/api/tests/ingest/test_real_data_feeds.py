@@ -34,8 +34,27 @@ class StubHttpClient:
 
 class FakeTushareClient:
     def __init__(self) -> None:
-        self.pro_bar_calls: list[dict[str, object]] = []
         self.stock_basic_calls: list[dict[str, object]] = []
+
+    def stock_basic(self, **kwargs: object) -> list[dict[str, object]]:
+        self.stock_basic_calls.append(kwargs)
+        return [
+            {
+                "ts_code": "600157.SH",
+                "name": "永泰能源",
+                "industry": None,
+                "market": "A",
+            }
+        ]
+
+
+class FakeTushareModule:
+    def __init__(self) -> None:
+        self.token_values: list[str] = []
+        self.pro_bar_calls: list[dict[str, object]] = []
+
+    def set_token(self, token: str) -> None:
+        self.token_values.append(token)
 
     def pro_bar(self, **kwargs: object) -> list[dict[str, object]]:
         self.pro_bar_calls.append(kwargs)
@@ -70,17 +89,6 @@ class FakeTushareClient:
                 "turnover_rate": 1.1,
                 "adj_factor": 1.0,
             },
-        ]
-
-    def stock_basic(self, **kwargs: object) -> list[dict[str, object]]:
-        self.stock_basic_calls.append(kwargs)
-        return [
-            {
-                "ts_code": "600157.SH",
-                "name": "永泰能源",
-                "industry": None,
-                "market": "A",
-            }
         ]
 
 
@@ -129,12 +137,13 @@ def test_akshare_daily_price_feed_returns_metadata() -> None:
     assert metadata["market"] == "A"
 
 
-def test_tushare_daily_price_feed_uses_pro_api_qfq_contract(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_tushare_daily_price_feed_uses_module_level_qfq_contract(monkeypatch: pytest.MonkeyPatch) -> None:
     from swinginsight.ingest.adapters.tushare_daily_price_feed import TushareDailyPriceFeed
 
-    fake_client = FakeTushareClient()
+    fake_module = FakeTushareModule()
     fake_tushare = types.ModuleType("tushare")
-    fake_tushare.pro_api = lambda token: fake_client
+    fake_tushare.set_token = fake_module.set_token
+    fake_tushare.pro_bar = fake_module.pro_bar
     monkeypatch.setitem(sys.modules, "tushare", fake_tushare)
 
     rows = TushareDailyPriceFeed(token="token").fetch_daily_prices(
@@ -147,10 +156,11 @@ def test_tushare_daily_price_feed_uses_pro_api_qfq_contract(monkeypatch: pytest.
     assert rows[0]["trade_date"] == date(2026, 3, 30)
     assert rows[0]["close_price"] == 1.28
     assert rows[0]["data_source"] == "tushare"
-    assert fake_client.pro_bar_calls[0]["ts_code"] == "600157.SH"
-    assert fake_client.pro_bar_calls[0]["start_date"] == "20260330"
-    assert fake_client.pro_bar_calls[0]["end_date"] == "20260331"
-    assert fake_client.pro_bar_calls[0]["adj"] == "qfq"
+    assert fake_module.token_values == ["token"]
+    assert fake_module.pro_bar_calls[0]["ts_code"] == "600157.SH"
+    assert fake_module.pro_bar_calls[0]["start_date"] == "20260330"
+    assert fake_module.pro_bar_calls[0]["end_date"] == "20260331"
+    assert fake_module.pro_bar_calls[0]["adj"] == "qfq"
 
 
 def test_tushare_daily_price_feed_requires_token() -> None:

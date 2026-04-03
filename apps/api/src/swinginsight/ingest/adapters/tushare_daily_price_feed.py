@@ -11,6 +11,8 @@ class TushareDailyPriceFeed:
 
     def fetch_daily_prices(self, stock_code: str, start: date | None, end: date | None) -> list[dict[str, Any]]:
         client = self._get_client()
+        if self.client is None:
+            client.set_token(self.token)
         ts_code = self._to_ts_code(stock_code)
         rows = self._rows_from_response(
             client.pro_bar(
@@ -25,13 +27,13 @@ class TushareDailyPriceFeed:
         return sorted(payloads, key=lambda payload: payload["trade_date"])
 
     def _get_client(self) -> Any:
-        if self.client is not None:
-            return self.client
         if not self.token:
             raise ValueError("Tushare token is required to fetch daily prices")
+        if self.client is not None:
+            return self.client
         import tushare as ts
 
-        return ts.pro_api(self.token)
+        return ts
 
     def _rows_from_response(self, response: Any) -> list[dict[str, Any]]:
         if response is None:
