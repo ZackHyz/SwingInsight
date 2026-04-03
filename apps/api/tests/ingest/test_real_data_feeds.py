@@ -5,6 +5,7 @@ from pathlib import Path
 import types
 import sys
 
+import pandas as pd
 import pytest
 
 
@@ -133,6 +134,48 @@ class FakeTushareModule:
         ]
 
 
+class FakeMootdxClient:
+    def __init__(self) -> None:
+        self.bars_calls: list[dict[str, object]] = []
+
+    def bars(self, **kwargs: object) -> pd.DataFrame:
+        self.bars_calls.append(kwargs)
+        return pd.DataFrame(
+            [
+                {
+                    "open": 1.28,
+                    "close": 1.31,
+                    "high": 1.33,
+                    "low": 1.27,
+                    "vol": 156789,
+                    "volume": 156789,
+                    "amount": 1234567890,
+                    "year": 2026,
+                    "month": 3,
+                    "day": 31,
+                    "hour": 15,
+                    "minute": 0,
+                    "datetime": "2026-03-31 15:00:00",
+                },
+                {
+                    "open": 1.25,
+                    "close": 1.28,
+                    "high": 1.29,
+                    "low": 1.23,
+                    "vol": 123456,
+                    "volume": 123456,
+                    "amount": 987654321,
+                    "year": 2026,
+                    "month": 3,
+                    "day": 30,
+                    "hour": 15,
+                    "minute": 0,
+                    "datetime": "2026-03-30 15:00:00",
+                },
+            ]
+        )
+
+
 def test_akshare_daily_price_feed_parses_eastmoney_kline_payload() -> None:
     from swinginsight.ingest.adapters.akshare_daily_price_feed import AkshareDailyPriceFeed
 
@@ -176,6 +219,39 @@ def test_akshare_daily_price_feed_returns_metadata() -> None:
     assert metadata["stock_code"] == "600157"
     assert metadata["stock_name"] == "永泰能源"
     assert metadata["market"] == "A"
+
+
+def test_mootdx_daily_price_feed_maps_bars_to_unified_rows() -> None:
+    from swinginsight.ingest.adapters.mootdx_daily_price_feed import MootdxDailyPriceFeed
+
+    fake_client = FakeMootdxClient()
+
+    rows = MootdxDailyPriceFeed(client=fake_client).fetch_daily_prices(
+        stock_code="600157",
+        start=date(2026, 3, 30),
+        end=date(2026, 3, 31),
+    )
+
+    assert len(rows) == 2
+    assert rows[0]["stock_code"] == "600157"
+    assert rows[0]["trade_date"] == date(2026, 3, 30)
+    assert rows[0]["open_price"] == 1.25
+    assert rows[0]["close_price"] == 1.28
+    assert rows[0]["pre_close_price"] is None
+    assert rows[0]["change_amount"] is None
+    assert rows[0]["change_pct"] is None
+    assert rows[0]["amplitude_pct"] is None
+    assert rows[0]["turnover_rate"] is None
+    assert rows[0]["adj_type"] == "raw"
+    assert rows[0]["adj_factor"] is None
+    assert rows[0]["is_trading_day"] is True
+    assert rows[0]["data_source"] == "mootdx"
+    assert fake_client.bars_calls[0] == {
+        "symbol": "600157",
+        "frequency": 9,
+        "start": 0,
+        "offset": 800,
+    }
 
 
 def test_tushare_daily_price_feed_uses_module_level_qfq_contract(monkeypatch: pytest.MonkeyPatch) -> None:
