@@ -29,6 +29,56 @@ class StubHttpClient:
         return StubResponse(self.payload)
 
 
+class FakeTushareClient:
+    def __init__(self) -> None:
+        self.pro_bar_calls: list[dict[str, object]] = []
+        self.stock_basic_calls: list[dict[str, object]] = []
+
+    def pro_bar(self, **kwargs: object) -> list[dict[str, object]]:
+        self.pro_bar_calls.append(kwargs)
+        return [
+            {
+                "ts_code": "600157.SH",
+                "trade_date": "20260330",
+                "open": 1.25,
+                "close": 1.28,
+                "high": 1.29,
+                "low": 1.23,
+                "vol": 123456,
+                "amount": 987654321,
+                "change": 0.03,
+                "pct_chg": 2.4,
+                "pre_close": 1.25,
+                "turnover_rate": 1.2,
+            },
+            {
+                "ts_code": "600157.SH",
+                "trade_date": "20260331",
+                "open": 1.28,
+                "close": 1.31,
+                "high": 1.33,
+                "low": 1.27,
+                "vol": 156789,
+                "amount": 1234567890,
+                "change": 0.03,
+                "pct_chg": 1.05,
+                "pre_close": 1.28,
+                "turnover_rate": 1.1,
+            },
+        ]
+
+    def stock_basic(self, **kwargs: object) -> list[dict[str, object]]:
+        self.stock_basic_calls.append(kwargs)
+        return [
+            {
+                "ts_code": "600157.SH",
+                "name": "永泰能源",
+                "industry": None,
+                "market": "A",
+            }
+        ]
+
+
 def test_akshare_daily_price_feed_parses_eastmoney_kline_payload() -> None:
     from swinginsight.ingest.adapters.akshare_daily_price_feed import AkshareDailyPriceFeed
 
@@ -72,6 +122,37 @@ def test_akshare_daily_price_feed_returns_metadata() -> None:
     assert metadata["stock_code"] == "600157"
     assert metadata["stock_name"] == "永泰能源"
     assert metadata["market"] == "A"
+
+
+def test_tushare_daily_price_feed_maps_pro_bar_rows() -> None:
+    from swinginsight.ingest.adapters.tushare_daily_price_feed import TushareDailyPriceFeed
+
+    fake_client = FakeTushareClient()
+
+    rows = TushareDailyPriceFeed(client=fake_client, token="token").fetch_daily_prices(
+        stock_code="600157",
+        start=date(2026, 3, 30),
+        end=date(2026, 3, 31),
+    )
+
+    assert rows[0]["stock_code"] == "600157"
+    assert rows[0]["trade_date"] == date(2026, 3, 30)
+    assert rows[0]["close_price"] == 1.28
+    assert rows[0]["data_source"] == "tushare"
+    assert fake_client.pro_bar_calls[0]["ts_code"] == "600157.SH"
+
+
+def test_tushare_metadata_feed_maps_stock_basic_row() -> None:
+    from swinginsight.ingest.adapters.tushare_metadata_feed import TushareMetadataFeed
+
+    fake_client = FakeTushareClient()
+
+    metadata = TushareMetadataFeed(client=fake_client, token="token").fetch_stock_metadata("600157")
+
+    assert metadata["stock_code"] == "600157"
+    assert metadata["stock_name"] == "永泰能源"
+    assert metadata["market"] == "A"
+    assert fake_client.stock_basic_calls[0]["ts_code"] == "600157.SH"
 
 
 def test_import_market_data_uses_real_feed_by_default() -> None:

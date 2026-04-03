@@ -8,7 +8,9 @@ dependencies = [
   "alembic>=1.18,<2.0",
   "fastapi>=0.118,<1.0",
   "httpx>=0.28,<1.0",
+  "mootdx>=0.11,<1.0",
   "psycopg[binary]>=3.3,<4.0",
+  "tushare>=1.4,<2.0",
   "sqlalchemy>=2.0,<3.0",
   "uvicorn>=0.38,<1.0",
 ]
