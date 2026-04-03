@@ -254,6 +254,53 @@ class PagedMootdxClient:
         return pd.DataFrame(rows)
 
 
+class LowLevelMootdxSecurityClient:
+    def __init__(self) -> None:
+        self.calls: list[tuple[int, int, str, int, int]] = []
+
+    def get_security_bars(self, frequency: int, market: int, symbol: str, start: int, offset: int) -> pd.DataFrame:
+        self.calls.append((frequency, market, symbol, start, offset))
+        if symbol != "920019" or market != 2:
+            return pd.DataFrame([])
+        return pd.DataFrame(
+            [
+                {
+                    "open": 2.31,
+                    "close": 2.34,
+                    "high": 2.36,
+                    "low": 2.28,
+                    "vol": 54321,
+                    "amount": 123456789,
+                    "year": 2026,
+                    "month": 4,
+                    "day": 1,
+                    "hour": 15,
+                    "minute": 0,
+                    "datetime": "2026-04-01 15:00:00",
+                },
+                {
+                    "open": 2.28,
+                    "close": 2.31,
+                    "high": 2.33,
+                    "low": 2.25,
+                    "vol": 43210,
+                    "amount": 98765432,
+                    "year": 2026,
+                    "month": 3,
+                    "day": 31,
+                    "hour": 15,
+                    "minute": 0,
+                    "datetime": "2026-03-31 15:00:00",
+                },
+            ]
+        )
+
+
+class LowLevelMootdxQuoteClient:
+    def __init__(self) -> None:
+        self.client = LowLevelMootdxSecurityClient()
+
+
 def test_akshare_daily_price_feed_parses_eastmoney_kline_payload() -> None:
     from swinginsight.ingest.adapters.akshare_daily_price_feed import AkshareDailyPriceFeed
 
@@ -362,6 +409,47 @@ def test_mootdx_daily_price_feed_rejects_invalid_symbol() -> None:
             start=date(2026, 3, 30),
             end=date(2026, 3, 31),
         )
+
+
+def test_mootdx_daily_price_feed_uses_bj_market_id_for_920_symbols() -> None:
+    from swinginsight.ingest.adapters.mootdx_daily_price_feed import MootdxDailyPriceFeed
+
+    fake_client = LowLevelMootdxQuoteClient()
+
+    rows = MootdxDailyPriceFeed(client=fake_client).fetch_daily_prices(
+        stock_code="920019",
+        start=date(2026, 3, 31),
+        end=date(2026, 4, 1),
+    )
+
+    assert len(rows) == 2
+    assert rows[0]["stock_code"] == "920019"
+    assert rows[0]["trade_date"] == date(2026, 3, 31)
+    assert rows[0]["data_source"] == "mootdx"
+    assert fake_client.client.calls[0] == (9, 2, "920019", 0, 800)
+
+
+def test_mootdx_daily_price_feed_resolves_runtime_client_once(monkeypatch: pytest.MonkeyPatch) -> None:
+    from swinginsight.ingest.adapters import mootdx_daily_price_feed as mootdx_feed
+
+    factory_calls: list[tuple[str, dict[str, object]]] = []
+    fake_client = PagedMootdxClient()
+
+    def fake_factory(market: str = "std", **kwargs: object) -> PagedMootdxClient:
+        factory_calls.append((market, kwargs))
+        return fake_client
+
+    monkeypatch.setattr(mootdx_feed.Quotes, "factory", staticmethod(fake_factory))
+
+    rows = mootdx_feed.MootdxDailyPriceFeed().fetch_daily_prices(
+        stock_code="600157",
+        start=date(2026, 3, 31),
+        end=date(2026, 4, 1),
+    )
+
+    assert len(rows) == 2
+    assert len(factory_calls) == 1
+    assert len(fake_client.bars_calls) == 2
 
 
 def test_tushare_daily_price_feed_uses_module_level_qfq_contract(monkeypatch: pytest.MonkeyPatch) -> None:

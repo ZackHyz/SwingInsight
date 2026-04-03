@@ -16,8 +16,9 @@ class MootdxDailyPriceFeed:
 
     def fetch_daily_prices(self, stock_code: str, start: date | None, end: date | None) -> list[dict[str, Any]]:
         symbol = self._normalize_stock_code(stock_code)
-        self._infer_market(symbol)
-        rows = self._fetch_rows(symbol=symbol, start=start, end=end)
+        market_id = self._market_id_for_symbol(symbol)
+        client = self._get_client()
+        rows = self._fetch_rows(client=client, symbol=symbol, market_id=market_id, start=start, end=end)
         payloads = [self._map_row(stock_code=symbol, row=row) for row in rows]
         if start is not None or end is not None:
             payloads = [
@@ -43,29 +44,29 @@ class MootdxDailyPriceFeed:
             raise ValueError("Mootdx daily prices require a 6-digit stock code")
         return normalized
 
-    def _infer_market(self, stock_code: str) -> str:
+    def _market_id_for_symbol(self, stock_code: str) -> int:
+        if stock_code.startswith(("4", "8", "92")):
+            return 2
         if stock_code.startswith(("5", "6", "7", "9")):
-            return "sh"
-        if stock_code.startswith(("4", "8")):
-            return "bj"
+            return 1
         if stock_code.startswith(("0", "1", "2", "3")):
-            return "sz"
+            return 0
         raise ValueError(f"Mootdx daily prices only support Shanghai/Shenzhen/BJ stock codes: {stock_code}")
 
-    def _fetch_rows(self, symbol: str, start: date | None, end: date | None) -> list[dict[str, Any]]:
+    def _fetch_rows(
+        self,
+        client: Any,
+        symbol: str,
+        market_id: int,
+        start: date | None,
+        end: date | None,
+    ) -> list[dict[str, Any]]:
         target_date = start or end
         rows: list[dict[str, Any]] = []
         page_start = 0
 
         while True:
-            page_rows = self._rows_from_response(
-                self._get_client().bars(
-                    symbol=symbol,
-                    frequency=9,
-                    start=page_start,
-                    offset=self.page_size,
-                )
-            )
+            page_rows = self._fetch_page_rows(client=client, symbol=symbol, market_id=market_id, start=page_start)
             if not page_rows:
                 break
 
@@ -80,6 +81,24 @@ class MootdxDailyPriceFeed:
             page_start += self.page_size
 
         return rows
+
+    def _fetch_page_rows(self, client: Any, symbol: str, market_id: int, start: int) -> list[dict[str, Any]]:
+        security_client = getattr(client, "client", None)
+        if security_client is not None and hasattr(security_client, "get_security_bars"):
+            response = security_client.get_security_bars(9, market_id, symbol, start, self.page_size)
+            return self._rows_from_response(response)
+
+        bars = getattr(client, "bars", None)
+        if callable(bars):
+            response = bars(
+                symbol=symbol,
+                frequency=9,
+                start=start,
+                offset=self.page_size,
+            )
+            return self._rows_from_response(response)
+
+        raise AttributeError("Mootdx client does not expose bars() or client.get_security_bars()")
 
     def _rows_from_response(self, response: Any) -> list[dict[str, Any]]:
         if response is None:
