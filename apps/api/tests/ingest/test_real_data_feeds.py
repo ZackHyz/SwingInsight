@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from datetime import date
 from pathlib import Path
+import types
 import sys
+
+import pytest
 
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
@@ -31,11 +34,11 @@ class StubHttpClient:
 
 class FakeTushareClient:
     def __init__(self) -> None:
-        self.pro_bar_calls: list[dict[str, object]] = []
+        self.daily_calls: list[dict[str, object]] = []
         self.stock_basic_calls: list[dict[str, object]] = []
 
-    def pro_bar(self, **kwargs: object) -> list[dict[str, object]]:
-        self.pro_bar_calls.append(kwargs)
+    def daily(self, **kwargs: object) -> list[dict[str, object]]:
+        self.daily_calls.append(kwargs)
         return [
             {
                 "ts_code": "600157.SH",
@@ -49,7 +52,6 @@ class FakeTushareClient:
                 "change": 0.03,
                 "pct_chg": 2.4,
                 "pre_close": 1.25,
-                "turnover_rate": 1.2,
             },
             {
                 "ts_code": "600157.SH",
@@ -63,7 +65,6 @@ class FakeTushareClient:
                 "change": 0.03,
                 "pct_chg": 1.05,
                 "pre_close": 1.28,
-                "turnover_rate": 1.1,
             },
         ]
 
@@ -124,12 +125,15 @@ def test_akshare_daily_price_feed_returns_metadata() -> None:
     assert metadata["market"] == "A"
 
 
-def test_tushare_daily_price_feed_maps_pro_bar_rows() -> None:
+def test_tushare_daily_price_feed_uses_pro_api_daily_contract(monkeypatch: pytest.MonkeyPatch) -> None:
     from swinginsight.ingest.adapters.tushare_daily_price_feed import TushareDailyPriceFeed
 
     fake_client = FakeTushareClient()
+    fake_tushare = types.ModuleType("tushare")
+    fake_tushare.pro_api = lambda token: fake_client
+    monkeypatch.setitem(sys.modules, "tushare", fake_tushare)
 
-    rows = TushareDailyPriceFeed(client=fake_client, token="token").fetch_daily_prices(
+    rows = TushareDailyPriceFeed(token="token").fetch_daily_prices(
         stock_code="600157",
         start=date(2026, 3, 30),
         end=date(2026, 3, 31),
@@ -139,7 +143,18 @@ def test_tushare_daily_price_feed_maps_pro_bar_rows() -> None:
     assert rows[0]["trade_date"] == date(2026, 3, 30)
     assert rows[0]["close_price"] == 1.28
     assert rows[0]["data_source"] == "tushare"
-    assert fake_client.pro_bar_calls[0]["ts_code"] == "600157.SH"
+    assert fake_client.daily_calls[0]["ts_code"] == "600157.SH"
+
+
+def test_tushare_daily_price_feed_requires_token() -> None:
+    from swinginsight.ingest.adapters.tushare_daily_price_feed import TushareDailyPriceFeed
+
+    with pytest.raises(ValueError, match="Tushare token is required to fetch daily prices"):
+        TushareDailyPriceFeed().fetch_daily_prices(
+            stock_code="600157",
+            start=date(2026, 3, 30),
+            end=date(2026, 3, 31),
+        )
 
 
 def test_tushare_metadata_feed_maps_stock_basic_row() -> None:
@@ -152,7 +167,16 @@ def test_tushare_metadata_feed_maps_stock_basic_row() -> None:
     assert metadata["stock_code"] == "600157"
     assert metadata["stock_name"] == "永泰能源"
     assert metadata["market"] == "A"
+    assert metadata["industry"] is None
+    assert metadata["concept_tags"] == []
     assert fake_client.stock_basic_calls[0]["ts_code"] == "600157.SH"
+
+
+def test_tushare_metadata_feed_requires_token() -> None:
+    from swinginsight.ingest.adapters.tushare_metadata_feed import TushareMetadataFeed
+
+    with pytest.raises(ValueError, match="Tushare token is required to fetch stock metadata"):
+        TushareMetadataFeed().fetch_stock_metadata("600157")
 
 
 def test_import_market_data_uses_real_feed_by_default() -> None:
