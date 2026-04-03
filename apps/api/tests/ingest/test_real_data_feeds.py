@@ -157,6 +157,22 @@ def test_tushare_daily_price_feed_requires_token() -> None:
         )
 
 
+def test_tushare_daily_price_feed_rejects_blank_token(monkeypatch: pytest.MonkeyPatch) -> None:
+    from swinginsight.ingest.adapters.tushare_daily_price_feed import TushareDailyPriceFeed
+
+    fake_client = FakeTushareClient()
+    fake_tushare = types.ModuleType("tushare")
+    fake_tushare.pro_api = lambda token: fake_client
+    monkeypatch.setitem(sys.modules, "tushare", fake_tushare)
+
+    with pytest.raises(ValueError, match="Tushare token is required to fetch daily prices"):
+        TushareDailyPriceFeed(token="   ").fetch_daily_prices(
+            stock_code="600157",
+            start=date(2026, 3, 30),
+            end=date(2026, 3, 31),
+        )
+
+
 def test_tushare_metadata_feed_maps_stock_basic_row() -> None:
     from swinginsight.ingest.adapters.tushare_metadata_feed import TushareMetadataFeed
 
@@ -177,6 +193,18 @@ def test_tushare_metadata_feed_requires_token() -> None:
 
     with pytest.raises(ValueError, match="Tushare token is required to fetch stock metadata"):
         TushareMetadataFeed().fetch_stock_metadata("600157")
+
+
+def test_tushare_metadata_feed_rejects_blank_token(monkeypatch: pytest.MonkeyPatch) -> None:
+    from swinginsight.ingest.adapters.tushare_metadata_feed import TushareMetadataFeed
+
+    fake_client = FakeTushareClient()
+    fake_tushare = types.ModuleType("tushare")
+    fake_tushare.pro_api = lambda token: fake_client
+    monkeypatch.setitem(sys.modules, "tushare", fake_tushare)
+
+    with pytest.raises(ValueError, match="Tushare token is required to fetch stock metadata"):
+        TushareMetadataFeed(token="   ").fetch_stock_metadata("600157")
 
 
 def test_import_market_data_uses_real_feed_by_default() -> None:

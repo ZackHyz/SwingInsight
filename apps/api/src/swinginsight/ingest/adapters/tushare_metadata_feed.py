@@ -31,7 +31,7 @@ class TushareMetadataFeed:
     def _get_client(self) -> Any:
         if self.client is not None:
             return self.client
-        if self.token is None:
+        if not self.token:
             raise ValueError("Tushare token is required to fetch stock metadata")
         import tushare as ts
 
