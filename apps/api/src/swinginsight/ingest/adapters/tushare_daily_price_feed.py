@@ -27,10 +27,10 @@ class TushareDailyPriceFeed:
         return sorted(payloads, key=lambda payload: payload["trade_date"])
 
     def _get_client(self) -> Any:
-        if not self.token:
-            raise ValueError("Tushare token is required to fetch daily prices")
         if self.client is not None:
             return self.client
+        if not self.token:
+            raise ValueError("Tushare token is required to fetch daily prices")
         import tushare as ts
 
         return ts

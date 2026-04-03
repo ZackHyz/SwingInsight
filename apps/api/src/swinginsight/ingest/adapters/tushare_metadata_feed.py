@@ -19,7 +19,9 @@ class TushareMetadataFeed:
                 fields="ts_code,symbol,name,area,industry,market,list_date",
             )
         )
-        row = rows[0] if rows else {}
+        if not rows:
+            raise ValueError(f"Tushare stock metadata not found for {stock_code}")
+        row = rows[0]
         return {
             "stock_code": stock_code,
             "stock_name": str(row.get("name") or stock_code),

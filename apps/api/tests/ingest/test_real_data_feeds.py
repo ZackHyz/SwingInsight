@@ -34,7 +34,43 @@ class StubHttpClient:
 
 class FakeTushareClient:
     def __init__(self) -> None:
+        self.pro_bar_calls: list[dict[str, object]] = []
         self.stock_basic_calls: list[dict[str, object]] = []
+
+    def pro_bar(self, **kwargs: object) -> list[dict[str, object]]:
+        self.pro_bar_calls.append(kwargs)
+        return [
+            {
+                "ts_code": "600157.SH",
+                "trade_date": "20260330",
+                "open": 1.25,
+                "close": 1.28,
+                "high": 1.29,
+                "low": 1.23,
+                "vol": 123456,
+                "amount": 987654321,
+                "change": 0.03,
+                "pct_chg": 2.4,
+                "pre_close": 1.25,
+                "turnover_rate": 1.2,
+                "adj_factor": 1.0,
+            },
+            {
+                "ts_code": "600157.SH",
+                "trade_date": "20260331",
+                "open": 1.28,
+                "close": 1.31,
+                "high": 1.33,
+                "low": 1.27,
+                "vol": 156789,
+                "amount": 1234567890,
+                "change": 0.03,
+                "pct_chg": 1.05,
+                "pre_close": 1.28,
+                "turnover_rate": 1.1,
+                "adj_factor": 1.0,
+            },
+        ]
 
     def stock_basic(self, **kwargs: object) -> list[dict[str, object]]:
         self.stock_basic_calls.append(kwargs)
@@ -46,6 +82,11 @@ class FakeTushareClient:
                 "market": "A",
             }
         ]
+
+
+class EmptyTushareMetadataClient:
+    def stock_basic(self, **kwargs: object) -> list[dict[str, object]]:
+        return []
 
 
 class FakeTushareModule:
@@ -163,6 +204,22 @@ def test_tushare_daily_price_feed_uses_module_level_qfq_contract(monkeypatch: py
     assert fake_module.pro_bar_calls[0]["adj"] == "qfq"
 
 
+def test_tushare_daily_price_feed_allows_injected_client_without_token() -> None:
+    from swinginsight.ingest.adapters.tushare_daily_price_feed import TushareDailyPriceFeed
+
+    fake_client = FakeTushareClient()
+
+    rows = TushareDailyPriceFeed(client=fake_client).fetch_daily_prices(
+        stock_code="600157",
+        start=date(2026, 3, 30),
+        end=date(2026, 3, 31),
+    )
+
+    assert rows[0]["stock_code"] == "600157"
+    assert rows[0]["data_source"] == "tushare"
+    assert fake_client.pro_bar_calls[0]["adj"] == "qfq"
+
+
 def test_tushare_daily_price_feed_requires_token() -> None:
     from swinginsight.ingest.adapters.tushare_daily_price_feed import TushareDailyPriceFeed
 
@@ -222,6 +279,13 @@ def test_tushare_metadata_feed_rejects_blank_token(monkeypatch: pytest.MonkeyPat
 
     with pytest.raises(ValueError, match="Tushare token is required to fetch stock metadata"):
         TushareMetadataFeed(token="   ").fetch_stock_metadata("600157")
+
+
+def test_tushare_metadata_feed_treats_empty_response_as_miss() -> None:
+    from swinginsight.ingest.adapters.tushare_metadata_feed import TushareMetadataFeed
+
+    with pytest.raises(ValueError, match="Tushare stock metadata not found for 600157"):
+        TushareMetadataFeed(client=EmptyTushareMetadataClient(), token="token").fetch_stock_metadata("600157")
 
 
 def test_import_market_data_uses_real_feed_by_default() -> None:
