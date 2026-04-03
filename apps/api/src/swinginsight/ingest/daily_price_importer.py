@@ -105,5 +105,5 @@ class DailyPriceImporter:
             "adj_type": payload.get("adj_type", "qfq"),
             "adj_factor": payload.get("adj_factor"),
             "is_trading_day": payload.get("is_trading_day", True),
-            "data_source": payload.get("data_source") or resolved_source_name,
+            "data_source": resolved_source_name,
         }
