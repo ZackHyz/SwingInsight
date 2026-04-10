@@ -13,6 +13,8 @@ SwingInsight is an A-share swing research workspace for turning-point detection,
 
 ### Backend
 
+Backend dependencies target Python 3.12+.
+
 ```bash
 python3 -m venv .venv
 .venv/bin/pip install -e apps/api pytest
@@ -41,15 +43,27 @@ pnpm test:e2e
 
 Copy `.env.example` to `.env` and provide real values locally.
 
-- `TUSHARE_TOKEN`: required for Tushare requests
-- `DATA_SOURCE_PRIORITY_DAILY_PRICE`: source priority for daily prices
+- `TUSHARE_TOKEN`: optional while `akshare` succeeds, but required for Tushare daily-price or metadata fallback to work
+- `DATA_SOURCE_PRIORITY_DAILY_PRICE`: source priority for daily prices, default `akshare,tushare,mootdx`
 - `DATA_SOURCE_PRIORITY_NEWS`: source priority for news ingestion
-- `DATA_SOURCE_PRIORITY_METADATA`: source priority for stock metadata
+- `DATA_SOURCE_PRIORITY_METADATA`: source priority for stock metadata, default `akshare,tushare,mootdx`
+
+Daily-price refresh tries providers in order until one succeeds and records the actual winner in `daily_price.data_source` plus `task_run_log`.
+
+Stock metadata uses its own fallback chain instead of borrowing the daily-price provider. `mootdx` remains a daily-price-only fallback and is skipped automatically for metadata lookups.
 
 News source priority currently supports `cninfo`, `eastmoney`, `akshare`, and `demo`. Example:
 
 ```bash
 export DATA_SOURCE_PRIORITY_NEWS=cninfo,eastmoney,akshare
+```
+
+Example market-data overrides:
+
+```bash
+export DATA_SOURCE_PRIORITY_DAILY_PRICE=akshare,tushare,mootdx
+export DATA_SOURCE_PRIORITY_METADATA=akshare,tushare,mootdx
+export TUSHARE_TOKEN=your-real-token
 ```
 
 ## Infrastructure
