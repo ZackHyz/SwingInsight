@@ -27,24 +27,26 @@ class DailyPriceImporter:
     def run(self, stock_code: str, start: date | None = None, end: date | None = None) -> ImportResult:
         started_at = datetime.now(UTC)
         payloads = self.feed.fetch_daily_prices(stock_code=stock_code, start=start, end=end)
+        resolved_source_name = self._resolve_source_name(payloads)
         result = ImportResult()
 
         for payload in payloads:
+            normalized_payload = self._normalize_payload(payload, resolved_source_name)
             existing = self.session.scalar(
                 select(DailyPrice).where(
-                    DailyPrice.stock_code == payload["stock_code"],
-                    DailyPrice.trade_date == payload["trade_date"],
-                    DailyPrice.adj_type == payload.get("adj_type", "qfq"),
+                    DailyPrice.stock_code == normalized_payload["stock_code"],
+                    DailyPrice.trade_date == normalized_payload["trade_date"],
+                    DailyPrice.adj_type == normalized_payload.get("adj_type", "qfq"),
                 )
             )
             if existing is None:
-                model = DailyPrice(**self._normalize_payload(payload))
+                model = DailyPrice(**normalized_payload)
                 self.session.add(model)
                 result.inserted += 1
                 continue
 
             changed = False
-            for field, value in self._normalize_payload(payload).items():
+            for field, value in normalized_payload.items():
                 if getattr(existing, field) != value:
                     setattr(existing, field, value)
                     changed = True
@@ -67,7 +69,7 @@ class DailyPriceImporter:
                     "stock_code": stock_code,
                     "start": start.isoformat() if start else None,
                     "end": end.isoformat() if end else None,
-                    "source": self.source_name,
+                    "source": resolved_source_name,
                 },
                 result_summary=f"inserted={result.inserted},updated={result.updated},skipped={result.skipped}",
             )
@@ -75,7 +77,17 @@ class DailyPriceImporter:
         self.session.commit()
         return result
 
-    def _normalize_payload(self, payload: dict[str, Any]) -> dict[str, Any]:
+    def _resolve_source_name(self, payloads: list[dict[str, Any]]) -> str:
+        resolved_source_name = getattr(self.feed, "resolved_source_name", None)
+        if resolved_source_name:
+            return str(resolved_source_name)
+        if payloads:
+            first_data_source = payloads[0].get("data_source")
+            if first_data_source:
+                return str(first_data_source)
+        return self.source_name
+
+    def _normalize_payload(self, payload: dict[str, Any], resolved_source_name: str) -> dict[str, Any]:
         return {
             "stock_code": payload["stock_code"],
             "trade_date": payload["trade_date"],
@@ -93,5 +105,5 @@ class DailyPriceImporter:
             "adj_type": payload.get("adj_type", "qfq"),
             "adj_factor": payload.get("adj_factor"),
             "is_trading_day": payload.get("is_trading_day", True),
-            "data_source": payload.get("data_source", self.source_name),
+            "data_source": resolved_source_name,
         }

@@ -124,6 +124,7 @@ describe("prediction panel", () => {
       />
     );
 
+    expect(screen.getByText("Intelligence Rail")).toBeTruthy();
     const panel = screen.getByRole("heading", { name: "预测面板" }).closest("aside");
     expect(panel).toBeTruthy();
     const scoped = within(panel as HTMLElement);
@@ -132,11 +133,11 @@ describe("prediction panel", () => {
     expect(scoped.getByText("当前状态: 主升初期")).toBeTruthy();
     expect(scoped.getByText("同股优先相似样本")).toBeTruthy();
     expect(scoped.getByText(/会优先展示当前股票历史上最接近的波段样本/)).toBeTruthy();
-    expect(scoped.getByText("相似样本数 20")).toBeTruthy();
-    expect(scoped.getByText("1日均值 -1.82%")).toBeTruthy();
-    expect(scoped.getByText("1日胜率 35.0%")).toBeTruthy();
-    expect(scoped.getByText("5日均值 -4.76%")).toBeTruthy();
-    expect(scoped.getByText("10日均值 +0.91%")).toBeTruthy();
+    expect(panel?.textContent).toContain("相似样本数 20");
+    expect(panel?.textContent).toContain("1日均值 -1.82%");
+    expect(panel?.textContent).toContain("1日胜率 35.0%");
+    expect(panel?.textContent).toContain("5日均值 -4.76%");
+    expect(panel?.textContent).toContain("10日均值 +0.91%");
     expect(items.at(-1)?.textContent).toContain("样本股票 000001");
     expect(items.at(-1)?.textContent).toContain("相似窗口：2024-02-05 至 2024-02-13");
     expect(items.at(-1)?.textContent).toContain("所属波段：2024-02-01 至 2024-02-20");
@@ -150,12 +151,12 @@ describe("prediction panel", () => {
     expect(items.at(-1)?.textContent).toContain("样本后续3日涨跌幅 +3.40%");
     expect(items.at(-1)?.textContent).toContain("样本后续5日涨跌幅 -2.80%");
     expect(items.at(-1)?.textContent).toContain("样本后续10日涨跌幅 +8.60%");
-    expect(scoped.getByText("次日上涨 64.0%")).toBeTruthy();
-    expect(scoped.getByText("次日震荡 20.0%")).toBeTruthy();
-    expect(scoped.getByText("10日上涨 58.0%")).toBeTruthy();
-    expect(scoped.getByText("5日震荡 23.0%")).toBeTruthy();
-    expect(scoped.getByText("量比(5日) 1.4")).toBeTruthy();
-    expect(scoped.getByText("正向新闻占比 0.75")).toBeTruthy();
+    expect(panel?.textContent).toContain("次日上涨 64.0%");
+    expect(panel?.textContent).toContain("次日震荡 20.0%");
+    expect(panel?.textContent).toContain("10日上涨 58.0%");
+    expect(panel?.textContent).toContain("5日震荡 23.0%");
+    expect(panel?.textContent).toContain("量比(5日) 1.4");
+    expect(panel?.textContent).toContain("正向新闻占比 0.75");
     expect(scoped.getByText("回撤风险: 低")).toBeTruthy();
     expect(screen.getByText("历史买卖点占位: 1")).toBeTruthy();
     expect(screen.getByText("Liquidity support boosts banks")).toBeTruthy();

@@ -58,3 +58,43 @@ def test_end_to_end_research_flow() -> None:
     assert research_payload["final_turning_points"]
     assert research_payload["current_state"]["label"] != "placeholder"
     assert "news_summary" in research_payload["current_state"]
+
+
+def test_demo_reseed_clears_pattern_side_tables() -> None:
+    from sqlalchemy import func, select
+
+    from swinginsight.db.models.pattern import PatternFeature, PatternFutureStat, PatternWindow
+    from swinginsight.demo_seed import DEMO_STOCK_CODE, seed_demo_research_data
+    from swinginsight.services.pattern_feature_service import PatternFeatureService
+    from swinginsight.services.pattern_window_service import PatternWindowService
+
+    session_factory = build_session_factory()
+    with session_factory() as session:
+        seed_demo_research_data(session)
+        PatternWindowService(session).build_windows(stock_code=DEMO_STOCK_CODE)
+        PatternFeatureService(session).materialize(stock_code=DEMO_STOCK_CODE)
+        PatternWindowService(session).materialize_future_stats(stock_code=DEMO_STOCK_CODE)
+        session.commit()
+
+        assert session.scalar(select(func.count()).select_from(PatternWindow).where(PatternWindow.stock_code == DEMO_STOCK_CODE)) > 0
+
+        seed_demo_research_data(session)
+        session.commit()
+
+        assert session.scalar(select(func.count()).select_from(PatternWindow).where(PatternWindow.stock_code == DEMO_STOCK_CODE)) == 0
+        assert (
+            session.scalar(
+                select(func.count())
+                .select_from(PatternFeature)
+                .where(PatternFeature.window_id.in_(select(PatternWindow.id).where(PatternWindow.stock_code == DEMO_STOCK_CODE)))
+            )
+            == 0
+        )
+        assert (
+            session.scalar(
+                select(func.count())
+                .select_from(PatternFutureStat)
+                .where(PatternFutureStat.window_id.in_(select(PatternWindow.id).where(PatternWindow.stock_code == DEMO_STOCK_CODE)))
+            )
+            == 0
+        )

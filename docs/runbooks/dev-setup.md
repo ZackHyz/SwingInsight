@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- Python 3.11+ available as `python3`
+- Python 3.12+ available as `python3`
 - Node.js and `pnpm`
 
 ## Backend
@@ -11,6 +11,13 @@
 python3 -m venv .venv
 .venv/bin/pip install -e apps/api pytest
 ```
+
+The backend install pulls the live market-data adapters, including `tushare` and `mootdx`.
+
+Set `TUSHARE_TOKEN` when you want Tushare fallback to succeed for daily prices or stock metadata. The default runtime order is:
+
+- daily prices: `akshare,tushare,mootdx`
+- stock metadata: `akshare,tushare,mootdx` with `mootdx` skipped because it does not implement metadata
 
 Run the full backend suite:
 
@@ -29,6 +36,8 @@ pnpm install
 pnpm test -- --run
 pnpm typecheck
 ```
+
+The frontend now renders as a terminal-style research workspace, but the local verification commands stay the same.
 
 Install Playwright browsers when you need browser smoke coverage:
 

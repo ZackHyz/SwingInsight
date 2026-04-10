@@ -5,13 +5,15 @@ SwingInsight is an A-share swing research workspace for turning-point detection,
 ## Workspace Layout
 
 - `apps/api`: FastAPI-oriented backend workspace
-- `apps/web`: Next.js-oriented frontend workspace
+- `apps/web`: Vite + React frontend workspace with a terminal-style research UI
 - `infra`: local infrastructure manifests
 - `docs`: architecture notes, plans, and runbooks
 
 ## Local Setup
 
 ### Backend
+
+Backend dependencies target Python 3.12+.
 
 ```bash
 python3 -m venv .venv
@@ -21,6 +23,8 @@ cd apps/api
 ```
 
 ### Frontend
+
+The web client is a dark terminal-style research workspace covering the landing page, stock research view, pattern library, and segment drill-down screens.
 
 ```bash
 cd apps/web
@@ -41,15 +45,27 @@ pnpm test:e2e
 
 Copy `.env.example` to `.env` and provide real values locally.
 
-- `TUSHARE_TOKEN`: required for Tushare requests
-- `DATA_SOURCE_PRIORITY_DAILY_PRICE`: source priority for daily prices
+- `TUSHARE_TOKEN`: optional while `akshare` succeeds, but required for Tushare daily-price or metadata fallback to work
+- `DATA_SOURCE_PRIORITY_DAILY_PRICE`: source priority for daily prices, default `akshare,tushare,mootdx`
 - `DATA_SOURCE_PRIORITY_NEWS`: source priority for news ingestion
-- `DATA_SOURCE_PRIORITY_METADATA`: source priority for stock metadata
+- `DATA_SOURCE_PRIORITY_METADATA`: source priority for stock metadata, default `akshare,tushare,mootdx`
+
+Daily-price refresh tries providers in order until one succeeds and records the actual winner in `daily_price.data_source` plus `task_run_log`.
+
+Stock metadata uses its own fallback chain instead of borrowing the daily-price provider. `mootdx` remains a daily-price-only fallback and is skipped automatically for metadata lookups.
 
 News source priority currently supports `cninfo`, `eastmoney`, `akshare`, and `demo`. Example:
 
 ```bash
 export DATA_SOURCE_PRIORITY_NEWS=cninfo,eastmoney,akshare
+```
+
+Example market-data overrides:
+
+```bash
+export DATA_SOURCE_PRIORITY_DAILY_PRICE=akshare,tushare,mootdx
+export DATA_SOURCE_PRIORITY_METADATA=akshare,tushare,mootdx
+export TUSHARE_TOKEN=your-real-token
 ```
 
 ## Infrastructure

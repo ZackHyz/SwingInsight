@@ -1,14 +1,35 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 
+import HomePage from "./app/page";
+import LibraryPage from "./app/library/page";
+import SegmentDetailPage from "./app/segments/[segmentId]/page";
 import StockResearchPage from "./app/stocks/[stockCode]/page";
+import "./styles/app-shell.css";
 
 function resolveStockCode(pathname: string): string {
   const match = pathname.match(/^\/stocks\/([^/]+)$/);
   return match?.[1] ?? "600157";
 }
 
+function resolveSegmentId(pathname: string): string {
+  const match = pathname.match(/^\/segments\/([^/]+)$/);
+  return match?.[1] ?? "1";
+}
+
 function App() {
+  if (window.location.pathname === "/") {
+    return <HomePage />;
+  }
+
+  if (window.location.pathname === "/library") {
+    return <LibraryPage />;
+  }
+
+  if (window.location.pathname.startsWith("/segments/")) {
+    return <SegmentDetailPage segmentId={resolveSegmentId(window.location.pathname)} />;
+  }
+
   return <StockResearchPage stockCode={resolveStockCode(window.location.pathname)} />;
 }
 

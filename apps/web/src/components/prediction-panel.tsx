@@ -1,5 +1,6 @@
 import { SimilarCaseList } from "./similar-case-list";
 import type { ApiClient, QueryWindow, SegmentChartWindowData, StockResearchData } from "../lib/api";
+import { getMarketValueClass } from "../lib/market-tone";
 
 type PredictionPanelProps = {
   apiClient: Pick<ApiClient, "getSegmentChartWindow">;
@@ -125,6 +126,16 @@ function formatPercent(value?: number) {
   return `${(value * 100).toFixed(1)}%`;
 }
 
+function getProbabilityValueClass(key: string): string {
+  if (key.startsWith("up_")) {
+    return "market-value market-value--positive";
+  }
+  if (key.startsWith("down_")) {
+    return "market-value market-value--negative";
+  }
+  return "market-value market-value--neutral";
+}
+
 export function PredictionPanel({ apiClient, stockCode, prices, autoPoints, finalPoints, currentState }: PredictionPanelProps) {
   const probabilities = currentState.probabilities ?? {};
   const keyFeatures = currentState.key_features ?? {};
@@ -140,59 +151,69 @@ export function PredictionPanel({ apiClient, stockCode, prices, autoPoints, fina
   });
 
   return (
-    <aside>
-      <h2>预测面板</h2>
-      <p>当前状态: {currentState.label}</p>
-      <p>{currentState.summary}</p>
-      <section>
-        <h3>方向概率</h3>
-        <ul>
+    <aside className="terminal-panel">
+      <header className="terminal-panel__header">
+        <div>
+          <p className="terminal-panel__eyebrow">Intelligence Rail</p>
+          <h2 className="terminal-panel__title">预测面板</h2>
+        </div>
+      </header>
+      <div className="terminal-panel__body">
+        <p className="terminal-copy">当前状态: {currentState.label}</p>
+        <p className="terminal-copy">{currentState.summary}</p>
+        <section className="terminal-stack">
+          <h3>方向概率</h3>
+          <ul className="terminal-list">
           {Object.entries(probabilities).map(([key, value]) => (
             <li key={key}>
-              {PROBABILITY_LABELS[key] ?? key} {(value * 100).toFixed(1)}%
+              {PROBABILITY_LABELS[key] ?? key} <span className={getProbabilityValueClass(key)}>{(value * 100).toFixed(1)}%</span>
             </li>
           ))}
-        </ul>
-      </section>
-      <section>
-        <h3>关键触发特征</h3>
-        <ul>
+          </ul>
+        </section>
+        <section className="terminal-stack">
+          <h3>关键触发特征</h3>
+          <ul className="terminal-list">
           {Object.entries(keyFeatures).map(([key, value]) => (
             <li key={key}>
-              {FEATURE_LABELS[key] ?? key} {value}
+              {FEATURE_LABELS[key] ?? key}{" "}
+              <span className={key === "pct_change" || key === "max_drawdown_pct" ? getMarketValueClass(value) : "market-value market-value--neutral"}>
+                {value}
+              </span>
             </li>
           ))}
-        </ul>
-      </section>
-      <section>
-        <h3>风险提示</h3>
-        <ul>
+          </ul>
+        </section>
+        <section className="terminal-stack">
+          <h3>风险提示</h3>
+          <ul className="terminal-list">
           {Object.entries(riskFlags).map(([key, value]) => (
             <li key={key}>
               {RISK_LABELS[key] ?? key}: {RISK_VALUE_LABELS[value] ?? value}
             </li>
           ))}
-        </ul>
-      </section>
-      {groupStat === undefined ? null : (
-        <section>
-          <h3>相似样本统计</h3>
-          <ul>
-            <li>相似样本数 {groupStat.sample_count ?? 0}</li>
-            <li>1日均值 {formatSignedPercent(groupStat.future_1d_mean)}</li>
-            <li>1日中位数 {formatSignedPercent(groupStat.future_1d_median)}</li>
-            <li>1日胜率 {formatPercent(groupStat.future_1d_win_rate)}</li>
-            <li>3日均值 {formatSignedPercent(groupStat.future_3d_mean)}</li>
-            <li>5日均值 {formatSignedPercent(groupStat.future_5d_mean)}</li>
-            <li>10日均值 {formatSignedPercent(groupStat.future_10d_mean)}</li>
           </ul>
         </section>
-      )}
-      <SimilarCaseList
-        items={similarCases}
-        currentChartWindow={currentChartWindow}
-        loadSegmentChartWindow={(segmentId) => apiClient.getSegmentChartWindow(String(segmentId))}
-      />
+        {groupStat === undefined ? null : (
+          <section className="terminal-stack">
+            <h3>相似样本统计</h3>
+            <ul className="terminal-list">
+            <li>相似样本数 {groupStat.sample_count ?? 0}</li>
+            <li>1日均值 <span className={getMarketValueClass(groupStat.future_1d_mean)}>{formatSignedPercent(groupStat.future_1d_mean)}</span></li>
+            <li>1日中位数 <span className={getMarketValueClass(groupStat.future_1d_median)}>{formatSignedPercent(groupStat.future_1d_median)}</span></li>
+            <li>1日胜率 {formatPercent(groupStat.future_1d_win_rate)}</li>
+            <li>3日均值 <span className={getMarketValueClass(groupStat.future_3d_mean)}>{formatSignedPercent(groupStat.future_3d_mean)}</span></li>
+            <li>5日均值 <span className={getMarketValueClass(groupStat.future_5d_mean)}>{formatSignedPercent(groupStat.future_5d_mean)}</span></li>
+            <li>10日均值 <span className={getMarketValueClass(groupStat.future_10d_mean)}>{formatSignedPercent(groupStat.future_10d_mean)}</span></li>
+            </ul>
+          </section>
+        )}
+        <SimilarCaseList
+          items={similarCases}
+          currentChartWindow={currentChartWindow}
+          loadSegmentChartWindow={(segmentId) => apiClient.getSegmentChartWindow(String(segmentId))}
+        />
+      </div>
     </aside>
   );
 }

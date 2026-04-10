@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import date, datetime, time, timedelta
+from zoneinfo import ZoneInfo
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import func, select
@@ -31,6 +32,9 @@ from swinginsight.services.turning_point_service import TurningPointService
 RESEARCH_LOOKBACK_DAYS = 730
 RESEARCH_REFRESH_BUFFER_DAYS = 45
 RESEARCH_NEWS_REFRESH_DAYS = 14
+MARKET_TIMEZONE = ZoneInfo("Asia/Shanghai")
+MARKET_OPEN_TIME = time(9, 15)
+MARKET_CLOSE_TIME = time(15, 0)
 
 
 @dataclass(slots=True, frozen=True)
@@ -56,17 +60,43 @@ def research_refresh_start(latest_trade_date: date | None, anchor_date: date | N
     return max(research_window_start(base_date), latest_trade_date - timedelta(days=RESEARCH_REFRESH_BUFFER_DAYS))
 
 
+def current_market_datetime() -> datetime:
+    return datetime.now(MARKET_TIMEZONE)
+
+
+def is_market_session_open(now: datetime | None = None) -> bool:
+    current = now or current_market_datetime()
+    if current.tzinfo is None:
+        current = current.replace(tzinfo=MARKET_TIMEZONE)
+    else:
+        current = current.astimezone(MARKET_TIMEZONE)
+    if current.weekday() >= 5:
+        return False
+    current_time = current.time()
+    return MARKET_OPEN_TIME <= current_time <= MARKET_CLOSE_TIME
+
+
+def should_refresh_remote_research_data(latest_trade_date: date | None, now: datetime | None = None) -> bool:
+    if latest_trade_date is None:
+        return True
+    return is_market_session_open(now)
+
+
 class StockResearchService:
     def __init__(self, session: Session) -> None:
         self.session = session
 
     def ensure_stock_ready(self, stock_code: str) -> bool:
         latest_trade_date_before_refresh = self._load_latest_trade_date(stock_code)
-        try:
-            import_result = self._refresh_live_prices(stock_code, latest_trade_date=latest_trade_date_before_refresh)
-        except IntegrityError:
-            self.session.rollback()
-            import_result = ImportResult()
+        should_refresh_remote = should_refresh_remote_research_data(latest_trade_date_before_refresh) and not self._has_demo_seed_data(stock_code)
+        if should_refresh_remote:
+            try:
+                import_result = self._refresh_live_prices(stock_code, latest_trade_date=latest_trade_date_before_refresh)
+            except IntegrityError:
+                self.session.rollback()
+                import_result = ImportResult()
+        else:
+            import_result = ImportResult(skipped=1)
         self.session.commit()
         latest_trade_date = self._load_latest_trade_date(stock_code)
         if latest_trade_date is None:
@@ -75,8 +105,19 @@ class StockResearchService:
         needs_rebuild = self._needs_rebuild(stock_code=stock_code, latest_trade_date=latest_trade_date)
         has_live_price_updates = self._has_live_price_updates(import_result)
 
-        news_refresh = self._refresh_news_window(stock_code=stock_code, anchor_date=latest_trade_date)
-        self.session.expire_all()
+        if should_refresh_remote:
+            news_refresh = self._refresh_news_window(stock_code=stock_code, anchor_date=latest_trade_date)
+            self.session.expire_all()
+        else:
+            news_refresh = NewsRefreshResult(
+                start_date=latest_trade_date,
+                end_date=latest_trade_date,
+                inserted=0,
+                processed_count=0,
+                duplicates=0,
+                point_mappings=0,
+                segment_mappings=0,
+            )
 
         if needs_rebuild or has_live_price_updates:
             self._rebuild_research_artifacts(stock_code=stock_code, latest_trade_date=latest_trade_date)
@@ -97,7 +138,7 @@ class StockResearchService:
 
     def _refresh_live_prices(self, stock_code: str, *, latest_trade_date: date | None) -> ImportResult:
         feed, source_name = build_daily_price_feed(demo=False)
-        ensure_stock_basic(self.session, stock_code, feed)
+        ensure_stock_basic(self.session, stock_code)
         return DailyPriceImporter(session=self.session, feed=feed, source_name=source_name).run(
             stock_code=stock_code,
             start=research_refresh_start(latest_trade_date),
@@ -215,6 +256,16 @@ class StockResearchService:
     def _stock_exists(self, stock_code: str) -> bool:
         stock = self.session.scalar(select(StockBasic.id).where(StockBasic.stock_code == stock_code).limit(1))
         return stock is not None
+
+    def _has_demo_seed_data(self, stock_code: str) -> bool:
+        return (
+            self.session.scalar(
+                select(DailyPrice.id)
+                .where(DailyPrice.stock_code == stock_code, DailyPrice.data_source == "demo")
+                .limit(1)
+            )
+            is not None
+        )
 
     def _load_latest_trade_date(self, stock_code: str):
         return self.session.scalar(select(func.max(DailyPrice.trade_date)).where(DailyPrice.stock_code == stock_code))
