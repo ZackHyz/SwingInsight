@@ -5,7 +5,7 @@ SwingInsight is an A-share swing research workspace for turning-point detection,
 ## Workspace Layout
 
 - `apps/api`: FastAPI-oriented backend workspace
-- `apps/web`: Next.js-oriented frontend workspace
+- `apps/web`: Vite + React frontend workspace with a terminal-style research UI
 - `infra`: local infrastructure manifests
 - `docs`: architecture notes, plans, and runbooks
 
@@ -23,6 +23,8 @@ cd apps/api
 ```
 
 ### Frontend
+
+The web client is a dark terminal-style research workspace covering the landing page, stock research view, pattern library, and segment drill-down screens.
 
 ```bash
 cd apps/web

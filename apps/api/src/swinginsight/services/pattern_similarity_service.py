@@ -55,7 +55,11 @@ class PatternSimilarityService:
 
         candidates = self.session.scalars(
             select(PatternWindow)
-            .where(PatternWindow.id != query_window.id)
+            .where(
+                PatternWindow.id != query_window.id,
+                PatternWindow.segment_id.is_not(None),
+                PatternWindow.segment_id != current_segment.id,
+            )
             .order_by(PatternWindow.end_date.asc(), PatternWindow.id.asc())
         ).all()
         ranked_candidates: list[tuple[float, PatternWindow, PatternFeature]] = []
@@ -71,9 +75,9 @@ class PatternSimilarityService:
         for _, candidate, feature_row in shortlist:
             candidate_features = self._feature_payload(feature_row)
             scores = calc_pattern_similarity(query_features, candidate_features)
-            segment = None
-            if candidate.segment_id is not None:
-                segment = self.session.scalar(select(SwingSegment).where(SwingSegment.id == candidate.segment_id))
+            segment = self.session.scalar(select(SwingSegment).where(SwingSegment.id == candidate.segment_id))
+            if segment is None or segment.id == current_segment.id:
+                continue
             future_stat = self.session.scalar(select(PatternFutureStat).where(PatternFutureStat.window_id == candidate.id))
             forward_returns = {
                 1: float(future_stat.ret_1d) if future_stat and future_stat.ret_1d is not None else None,
@@ -107,7 +111,7 @@ class PatternSimilarityService:
                 )
             )
 
-        cases.sort(
+            cases.sort(
             key=lambda case: (
                 0 if case.stock_code == current_segment.stock_code else 1,
                 -case.score,
@@ -115,7 +119,15 @@ class PatternSimilarityService:
                 case.window_id or 0,
             )
         )
-        top_cases = cases[:top_k]
+        top_cases: list[SimilarCase] = []
+        seen_segment_ids: set[int] = set()
+        for case in cases:
+            if case.segment_id in seen_segment_ids:
+                continue
+            seen_segment_ids.add(case.segment_id)
+            top_cases.append(case)
+            if len(top_cases) >= top_k:
+                break
         return PatternSearchResult(
             similar_cases=top_cases,
             group_stat=self._summarize_future_returns(top_cases),

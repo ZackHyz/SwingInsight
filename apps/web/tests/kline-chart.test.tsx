@@ -29,19 +29,19 @@ describe("kline chart", () => {
     expect(screen.getByLabelText("窗口起点")).toBeTruthy();
     const candlesticks = screen.getAllByTestId("candlestick-body");
     expect(candlesticks).toHaveLength(3);
-    expect(candlesticks[0].getAttribute("fill")).toBe("#ef4444");
-    expect(candlesticks[1].getAttribute("fill")).toBe("#22c55e");
+    expect(candlesticks[0].getAttribute("fill")).toBe("#ff6a7a");
+    expect(candlesticks[1].getAttribute("fill")).toBe("#31d0a0");
     const volumeBars = screen.getAllByTestId("volume-bar");
     expect(volumeBars).toHaveLength(3);
-    expect(volumeBars[0].getAttribute("fill")).toBe("#ef4444");
-    expect(volumeBars[1].getAttribute("fill")).toBe("#22c55e");
+    expect(volumeBars[0].getAttribute("fill")).toBe("#ff6a7a");
+    expect(volumeBars[1].getAttribute("fill")).toBe("#31d0a0");
 
     const markers = screen.getAllByTestId("turning-point-marker");
     expect(markers).toHaveLength(2);
     expect(markers[0].tagName.toLowerCase()).toBe("polygon");
-    expect(markers[0].getAttribute("fill")).toBe("#16a34a");
+    expect(markers[0].getAttribute("fill")).toBe("#ff6a7a");
     expect(markers[1].tagName.toLowerCase()).toBe("polygon");
-    expect(markers[1].getAttribute("fill")).toBe("#facc15");
+    expect(markers[1].getAttribute("fill")).toBe("#ffb85c");
 
     fireEvent.click(screen.getByTestId("kline-canvas"), { clientX: 460, clientY: 100 });
     expect(onSelectPrice).toHaveBeenCalledTimes(1);

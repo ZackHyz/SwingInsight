@@ -1,8 +1,12 @@
 "use client";
 
+import { AppShell } from "../../../components/app-shell";
 import { NewsTimeline } from "../../../components/news-timeline";
+import { StatusPill } from "../../../components/status-pill";
 import { SegmentSummaryCard } from "../../../components/segment-summary-card";
+import { TerminalPanel } from "../../../components/terminal-panel";
 import { apiClient, type ApiClient, type SegmentDetailData } from "../../../lib/api";
+import { getTrendTone } from "../../../lib/market-tone";
 
 type SegmentDetailPageProps = {
   segmentId?: string;
@@ -37,13 +41,26 @@ export default function SegmentDetailPage(props: SegmentDetailPageProps) {
   void (props.apiClient ?? apiClient);
 
   return (
-    <main>
-      <SegmentSummaryCard segment={pageData.segment} />
+    <AppShell
+      currentPath={`/segments/${segmentId}`}
+      title={`Segment ${segmentId}`}
+      subtitle={`Drill into the selected pattern segment, inspect summary metrics, and trace related events.`}
+      topBarContent={
+        <>
+          <StatusPill label={`Segment ${pageData.segment.id}`} />
+          <StatusPill label={pageData.segment.trend_direction === "up" ? "Up Trend" : "Down Trend"} tone={getTrendTone(pageData.segment.trend_direction)} />
+        </>
+      }
+    >
+      <TerminalPanel title="Segment Drill-Down" eyebrow="Pattern Analysis">
+        <SegmentSummaryCard segment={pageData.segment} />
+      </TerminalPanel>
       <NewsTimeline items={pageData.news_timeline} />
-      <section>
-        <h2>波段标签</h2>
-        <p>{pageData.labels.length === 0 ? "标签占位" : pageData.labels.map((label) => label.label_name).join(", ")}</p>
-      </section>
-    </main>
+      <TerminalPanel title="标签面板" eyebrow="Label Context">
+        <p className="terminal-copy">
+          {pageData.labels.length === 0 ? "标签占位" : pageData.labels.map((label) => label.label_name).join(", ")}
+        </p>
+      </TerminalPanel>
+    </AppShell>
   );
 }

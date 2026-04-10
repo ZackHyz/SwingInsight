@@ -80,6 +80,13 @@ describe("stock research page fetch", () => {
     await waitFor(() => {
       expect(screen.getByText("Ping An Bank (000001)")).toBeTruthy();
     });
+    expect(screen.getByRole("link", { name: "Research" })).toBeTruthy();
+    expect(screen.getByRole("navigation", { name: "Main navigation" }).className).toContain("app-shell__top-nav");
+    expect(screen.queryByLabelText("Primary")).toBeNull();
+    expect(screen.getByText("Instrument Context")).toBeTruthy();
+    expect(screen.getByText("Chart Workspace")).toBeTruthy();
+    expect(screen.getByText("Event Flow")).toBeTruthy();
+    expect(screen.getByTestId("research-workspace").className).toContain("terminal-grid--workspace-priority");
     expect(apiClient.getStockResearch).toHaveBeenCalledWith("000001");
   });
 
@@ -146,7 +153,9 @@ describe("stock research page fetch", () => {
     expect(screen.getByText("公告")).toBeTruthy();
     expect(screen.getByText("当前波段内")).toBeTruthy();
     expect(screen.getByText("顶部前2日")).toBeTruthy();
-    expect(screen.getByText("利多")).toBeTruthy();
+    const bullishTag = screen.getByText("利多");
+    expect(bullishTag).toBeTruthy();
+    expect(bullishTag.getAttribute("style")).toContain("255, 159, 172");
     expect(screen.getByText(/cninfo/)).toBeTruthy();
   });
 
