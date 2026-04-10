@@ -9,8 +9,9 @@ from swinginsight.ingest.adapters.akshare_daily_price_feed import AkshareDailyPr
 from swinginsight.ingest.adapters.demo_daily_price_feed import DemoDailyPriceFeed
 from swinginsight.ingest.adapters.mootdx_daily_price_feed import MootdxDailyPriceFeed
 from swinginsight.ingest.adapters.tushare_daily_price_feed import TushareDailyPriceFeed
+from swinginsight.ingest.adapters.tushare_metadata_feed import TushareMetadataFeed
 from swinginsight.ingest.daily_price_importer import DailyPriceImporter, ImportResult
-from swinginsight.ingest.ports import DailyPriceFeed
+from swinginsight.ingest.ports import DailyPriceFeed, MetadataFeed
 from swinginsight.settings import Settings
 from sqlalchemy import select
 
@@ -79,36 +80,47 @@ def _build_daily_price_provider(source_name: str, settings: Settings) -> DailyPr
     return None
 
 
-def ensure_stock_basic(session, stock_code: str, feed: object) -> None:
-    fetch_metadata = getattr(feed, "fetch_stock_metadata", None)
-    if fetch_metadata is None:
-        existing = session.scalar(select(StockBasic).where(StockBasic.stock_code == stock_code))
-        if existing is None:
-            session.add(
-                StockBasic(
-                    stock_code=stock_code,
-                    stock_name=stock_code,
-                    market="A",
-                    industry=None,
-                    concept_tags=[],
-                )
-        )
+def build_metadata_feeds(*, settings: Settings | None = None) -> list[tuple[str, MetadataFeed]]:
+    resolved_settings = settings or Settings.model_validate({})
+    providers: list[tuple[str, MetadataFeed]] = []
+    for source_name in resolved_settings.data_source_priority_metadata:
+        provider = _build_metadata_provider(source_name, resolved_settings)
+        if provider is not None:
+            providers.append((source_name, provider))
+    return providers
+
+
+def _build_metadata_provider(source_name: str, settings: Settings) -> MetadataFeed | None:
+    if source_name == "akshare":
+        return AkshareDailyPriceFeed()
+    if source_name == "tushare":
+        return TushareMetadataFeed(token=settings.tushare_token)
+    return None
+
+
+def ensure_stock_basic(
+    session,
+    stock_code: str,
+    metadata_feeds: list[tuple[str, MetadataFeed]] | None = None,
+) -> None:
+    providers = metadata_feeds if metadata_feeds is not None else build_metadata_feeds()
+    for _provider_name, provider in providers:
+        fetch_metadata = getattr(provider, "fetch_stock_metadata", None)
+        if fetch_metadata is None:
+            continue
+        try:
+            metadata = fetch_metadata(stock_code)
+        except Exception:  # noqa: BLE001
+            continue
+        if metadata is None:
+            continue
+        _upsert_stock_basic(session, stock_code, metadata)
         return
 
-    metadata = fetch_metadata(stock_code)
-    if metadata is None:
-        existing = session.scalar(select(StockBasic).where(StockBasic.stock_code == stock_code))
-        if existing is None:
-            session.add(
-                StockBasic(
-                    stock_code=stock_code,
-                    stock_name=stock_code,
-                    market="A",
-                    industry=None,
-                    concept_tags=[],
-                )
-            )
-        return
+    _ensure_minimal_stock_basic(session, stock_code)
+
+
+def _upsert_stock_basic(session, stock_code: str, metadata: dict[str, object]) -> None:
     existing = session.scalar(select(StockBasic).where(StockBasic.stock_code == stock_code))
     if existing is None:
         session.add(StockBasic(**metadata))
@@ -119,10 +131,27 @@ def ensure_stock_basic(session, stock_code: str, feed: object) -> None:
     existing.concept_tags = metadata.get("concept_tags", existing.concept_tags)
 
 
+def _ensure_minimal_stock_basic(session, stock_code: str) -> None:
+    existing = session.scalar(select(StockBasic).where(StockBasic.stock_code == stock_code))
+    if existing is not None:
+        return
+    session.add(
+        StockBasic(
+            stock_code=stock_code,
+            stock_name=stock_code,
+            market="A",
+            industry=None,
+            concept_tags=[],
+        )
+    )
+
+
 def import_daily_prices(stock_code: str, start: date | None = None, end: date | None = None, demo: bool = False) -> ImportResult:
     Base.metadata.create_all(get_engine())
-    feed, source_name = build_daily_price_feed(demo=demo)
+    settings = Settings.model_validate({})
+    feed, source_name = build_daily_price_feed(demo=demo, settings=settings)
+    metadata_feeds = [] if demo else build_metadata_feeds(settings=settings)
     with session_scope() as session:
-        ensure_stock_basic(session, stock_code, feed)
+        ensure_stock_basic(session, stock_code, metadata_feeds=metadata_feeds)
         importer = DailyPriceImporter(session=session, feed=feed, source_name=source_name)
         return importer.run(stock_code=stock_code, start=start, end=end)

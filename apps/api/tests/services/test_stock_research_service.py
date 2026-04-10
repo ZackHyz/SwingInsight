@@ -274,6 +274,64 @@ def test_ensure_stock_ready_retries_news_window_after_duplicate_event_race(monke
     assert process_calls == 2
 
 
+def test_refresh_live_prices_uses_independent_metadata_priority_chain(monkeypatch) -> None:
+    from swinginsight.db.models.stock import StockBasic
+    from swinginsight.jobs import import_market_data as import_market_data_job
+    from swinginsight.services import stock_research_service as stock_research_module
+
+    session = build_session()
+
+    class PriceFeed:
+        def fetch_daily_prices(self, stock_code: str, start: date | None, end: date | None):
+            return [
+                {
+                    "stock_code": stock_code,
+                    "trade_date": date(2026, 4, 2),
+                    "open_price": 10.0,
+                    "high_price": 10.5,
+                    "low_price": 9.8,
+                    "close_price": 10.2,
+                    "adj_type": "qfq",
+                    "data_source": "mootdx",
+                }
+            ]
+
+    class MetadataFeed:
+        def __init__(self) -> None:
+            self.calls: list[str] = []
+
+        def fetch_stock_metadata(self, stock_code: str):
+            self.calls.append(stock_code)
+            return {
+                "stock_code": stock_code,
+                "stock_name": "永泰能源",
+                "market": "A",
+                "industry": "Coal",
+                "concept_tags": ["energy"],
+            }
+
+    metadata_feed = MetadataFeed()
+
+    monkeypatch.setattr(stock_research_module, "build_daily_price_feed", lambda *, demo=False: (PriceFeed(), "priority"))
+    monkeypatch.setattr(
+        import_market_data_job,
+        "build_metadata_feeds",
+        lambda *, settings=None: [("tushare", metadata_feed)],
+    )
+
+    result = stock_research_module.StockResearchService(session)._refresh_live_prices(
+        "600157",
+        latest_trade_date=date(2026, 4, 1),
+    )
+
+    stock = session.scalar(select(StockBasic).where(StockBasic.stock_code == "600157"))
+    assert result.inserted == 1
+    assert stock is not None
+    assert stock.stock_name == "永泰能源"
+    assert stock.industry == "Coal"
+    assert metadata_feed.calls == ["600157"]
+
+
 def test_ensure_stock_ready_recreates_pattern_tables_and_materializes_pattern_data(monkeypatch) -> None:
     from swinginsight.db.models.pattern import PatternFeature, PatternFutureStat, PatternWindow
     from swinginsight.db.models.stock import StockBasic

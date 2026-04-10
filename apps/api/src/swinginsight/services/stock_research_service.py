@@ -97,7 +97,7 @@ class StockResearchService:
 
     def _refresh_live_prices(self, stock_code: str, *, latest_trade_date: date | None) -> ImportResult:
         feed, source_name = build_daily_price_feed(demo=False)
-        ensure_stock_basic(self.session, stock_code, feed)
+        ensure_stock_basic(self.session, stock_code)
         return DailyPriceImporter(session=self.session, feed=feed, source_name=source_name).run(
             stock_code=stock_code,
             start=research_refresh_start(latest_trade_date),
