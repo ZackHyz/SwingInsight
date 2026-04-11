@@ -43,6 +43,9 @@ def test_pattern_similarity_service_returns_window_level_matches() -> None:
 
 
 def test_pattern_similarity_service_excludes_future_windows_from_candidates() -> None:
+    from sqlalchemy import func, select
+
+    from swinginsight.db.models.pattern import PatternFeature, PatternWindow
     from swinginsight.services.pattern_feature_service import PatternFeatureService
     from swinginsight.services.pattern_similarity_service import PatternSimilarityService
     from swinginsight.services.pattern_window_service import PatternWindowService
@@ -56,8 +59,24 @@ def test_pattern_similarity_service_excludes_future_windows_from_candidates() ->
         PatternWindowService(session).materialize_future_stats(stock_code=stock_code)
 
     current_segment = segments[0]
-    result = PatternSimilarityService(session).find_similar_windows(current_segment=current_segment, top_k=20)
+    total_window_count = session.scalar(select(func.count(PatternWindow.id))) or 0
+    result = PatternSimilarityService(session).find_similar_windows(
+        current_segment=current_segment,
+        top_n=total_window_count,
+        top_k=total_window_count,
+    )
 
     assert result.query_window is not None
     query_start = result.query_window["start_date"]
+    eligible_window_ids = set(
+        session.scalars(
+            select(PatternWindow.id)
+            .join(PatternFeature, PatternFeature.window_id == PatternWindow.id)
+            .where(
+                PatternWindow.id != result.query_window["window_id"],
+                PatternWindow.end_date < query_start,
+            )
+        ).all()
+    )
+    assert {case.window_id for case in result.similar_cases} == eligible_window_ids
     assert all(case.window_end_date < query_start for case in result.similar_cases if case.window_end_date is not None)
