@@ -40,3 +40,24 @@ def test_pattern_similarity_service_returns_window_level_matches() -> None:
     assert result.similar_cases[0].candle_score is not None
     assert result.similar_cases[0].trend_score is not None
     assert result.similar_cases[0].vola_score is not None
+
+
+def test_pattern_similarity_service_excludes_future_windows_from_candidates() -> None:
+    from swinginsight.services.pattern_feature_service import PatternFeatureService
+    from swinginsight.services.pattern_similarity_service import PatternSimilarityService
+    from swinginsight.services.pattern_window_service import PatternWindowService
+
+    session = build_session()
+    segments = seed_prediction_context(session)
+
+    for stock_code in {"000001", "600157"}:
+        PatternWindowService(session).build_windows(stock_code=stock_code)
+        PatternFeatureService(session).materialize(stock_code=stock_code)
+        PatternWindowService(session).materialize_future_stats(stock_code=stock_code)
+
+    current_segment = segments[0]
+    result = PatternSimilarityService(session).find_similar_windows(current_segment=current_segment, top_k=20)
+
+    assert result.query_window is not None
+    query_start = result.query_window["start_date"]
+    assert all(case.window_end_date < query_start for case in result.similar_cases if case.window_end_date is not None)

@@ -56,6 +56,7 @@ class PatternSimilarityService:
         candidates = self.session.scalars(
             select(PatternWindow)
             .where(PatternWindow.id != query_window.id)
+            .where(PatternWindow.end_date < query_window.start_date)
             .order_by(PatternWindow.end_date.asc(), PatternWindow.id.asc())
         ).all()
         ranked_candidates: list[tuple[float, PatternWindow, PatternFeature]] = []
