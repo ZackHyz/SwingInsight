@@ -2,6 +2,12 @@ import { useMemo, useState, type MouseEvent, type WheelEvent } from "react";
 
 import type { PriceRow, StockPoint } from "../lib/api";
 
+const MARKET_UP_FILL = "#ff6a7a";
+const MARKET_UP_STROKE = "#ffd8de";
+const MARKET_DOWN_FILL = "#31d0a0";
+const MARKET_DOWN_STROKE = "#d8fff2";
+const MANUAL_POINT_FILL = "#ffb85c";
+
 type HighlightRange = {
   start_date: string;
   end_date: string;
@@ -61,6 +67,17 @@ function buildTrianglePoints(centerX: number, centerY: number, pointType: StockP
 
 function formatVolume(volume: number): string {
   return new Intl.NumberFormat("zh-CN").format(Math.round(volume));
+}
+
+function resolvePointFill(point: StockPoint): string {
+  if (point.source_type === "manual") {
+    return MANUAL_POINT_FILL;
+  }
+  return point.point_type === "peak" ? MARKET_UP_FILL : MARKET_DOWN_FILL;
+}
+
+function resolvePointStroke(point: StockPoint): string {
+  return point.point_type === "peak" ? MARKET_UP_STROKE : MARKET_DOWN_STROKE;
 }
 
 export function KlineChart({
@@ -173,17 +190,17 @@ export function KlineChart({
   }
 
   return (
-    <section>
+    <section className="terminal-stack">
       {title === null ? null : <h2>{title}</h2>}
       {interactive ? (
-        <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 12, flexWrap: "wrap" }}>
-          <button type="button" onClick={zoomIn} disabled={resolvedVisibleCount <= 20}>
+        <div className="kline-controls terminal-button-row">
+          <button className="terminal-button" type="button" onClick={zoomIn} disabled={resolvedVisibleCount <= 20}>
             放大
           </button>
-          <button type="button" onClick={zoomOut} disabled={resolvedVisibleCount >= prices.length}>
+          <button className="terminal-button" type="button" onClick={zoomOut} disabled={resolvedVisibleCount >= prices.length}>
             缩小
           </button>
-          <label>
+          <label className="terminal-field">
             窗口起点
             <input
               type="range"
@@ -213,14 +230,14 @@ export function KlineChart({
           width: "100%",
           height: "auto",
           display: "block",
-          background: "#fffdf8",
-          border: "1px solid #d6d0c4",
+          background: "#050917",
+          border: "1px solid rgba(140, 161, 255, 0.16)",
           borderRadius: 16,
-          boxShadow: "0 16px 40px rgba(30, 20, 10, 0.08)",
+          boxShadow: "0 18px 45px rgba(0, 0, 0, 0.3)",
         }}
       >
-        <rect x={plotPadding.left} y={plotPadding.top} width={plotWidth} height={plotHeight} fill="#fffbf3" rx="12" />
-        <rect x={plotPadding.left} y={volumeTop} width={plotWidth} height={volumeAreaHeight} fill="#fffaf1" rx="12" />
+        <rect x={plotPadding.left} y={plotPadding.top} width={plotWidth} height={plotHeight} fill="#0a1328" rx="12" />
+        <rect x={plotPadding.left} y={volumeTop} width={plotWidth} height={volumeAreaHeight} fill="#09101f" rx="12" />
         {highlightRect === null ? null : (
           <>
             <rect
@@ -229,7 +246,7 @@ export function KlineChart({
               y={plotPadding.top}
               width={highlightRect.width}
               height={plotHeight}
-              fill="#f59e0b"
+              fill="#8b7dff"
               opacity="0.12"
               rx="10"
             />
@@ -238,7 +255,7 @@ export function KlineChart({
               y={volumeTop}
               width={highlightRect.width}
               height={volumeAreaHeight}
-              fill="#f59e0b"
+              fill="#8b7dff"
               opacity="0.1"
               rx="10"
             />
@@ -253,11 +270,11 @@ export function KlineChart({
                 y1={y}
                 x2={plotPadding.left + plotWidth}
                 y2={y}
-                stroke="#d6d0c4"
+                stroke="rgba(148, 163, 200, 0.3)"
                 strokeDasharray="6 6"
                 strokeWidth="1"
               />
-              <text x={plotPadding.left - 10} y={y + 4} textAnchor="end" fontSize="12" fill="#6b7280">
+              <text x={plotPadding.left - 10} y={y + 4} textAnchor="end" fontSize="12" fill="#94a3b8">
                 {value.toFixed(2)}
               </text>
             </g>
@@ -285,7 +302,7 @@ export function KlineChart({
                 y1={highY}
                 x2={centerX}
                 y2={lowY}
-                stroke={rising ? "#dc2626" : "#16a34a"}
+                stroke={rising ? MARKET_UP_FILL : MARKET_DOWN_FILL}
                 strokeWidth="1.5"
               />
               <rect
@@ -294,8 +311,8 @@ export function KlineChart({
                 y={candleTop}
                 width={candleWidth}
                 height={candleHeight}
-                fill={rising ? "#ef4444" : "#22c55e"}
-                stroke={rising ? "#b91c1c" : "#15803d"}
+                fill={rising ? MARKET_UP_FILL : MARKET_DOWN_FILL}
+                stroke={rising ? MARKET_UP_STROKE : MARKET_DOWN_STROKE}
                 strokeWidth="1.5"
                 rx="1"
               />
@@ -307,8 +324,8 @@ export function KlineChart({
                     plotPadding.top + mapPriceY(autoPoint.point_price, plotHeight, scale),
                     autoPoint.point_type
                   )}
-                  fill={autoPoint.point_type === "peak" ? "#16a34a" : "#2563eb"}
-                  stroke="#eff6ff"
+                  fill={resolvePointFill(autoPoint)}
+                  stroke={resolvePointStroke(autoPoint)}
                   strokeWidth="1.8"
                 />
               )}
@@ -320,8 +337,8 @@ export function KlineChart({
                     plotPadding.top + mapPriceY(finalPoint.point_price, plotHeight, scale),
                     finalPoint.point_type
                   )}
-                  fill={finalPoint.source_type === "manual" ? "#facc15" : finalPoint.point_type === "peak" ? "#16a34a" : "#2563eb"}
-                  stroke="#fef2f2"
+                  fill={resolvePointFill(finalPoint)}
+                  stroke={resolvePointStroke(finalPoint)}
                   strokeWidth="1.5"
                 />
               )}
@@ -331,7 +348,7 @@ export function KlineChart({
                 y={volumeTop + volumeAreaHeight - volumeHeight}
                 width={candleWidth}
                 height={volumeHeight}
-                fill={rising ? "#ef4444" : "#22c55e"}
+                fill={rising ? MARKET_UP_FILL : MARKET_DOWN_FILL}
                 opacity="0.9"
                 rx="1"
               />
@@ -343,37 +360,38 @@ export function KlineChart({
           const step = plotWidth / Math.max(visiblePrices.length, 1);
           const centerX = plotPadding.left + step * index + step / 2;
           return (
-            <text key={row.trade_date} x={centerX} y={height - 18} textAnchor="middle" fontSize="12" fill="#6b7280">
+            <text key={row.trade_date} x={centerX} y={height - 18} textAnchor="middle" fontSize="12" fill="#94a3b8">
               {row.trade_date.slice(5)}
             </text>
           );
         })}
         {interactive ? (
-          <text x={plotPadding.left} y="18" fontSize="13" fill="#6b7280">
+          <text x={plotPadding.left} y="18" fontSize="13" fill="#94a3b8">
             滚轮缩放，滑块平移
           </text>
         ) : null}
-        <text x={plotPadding.left} y={volumeTop - 8} fontSize="12" fill="#6b7280">
+        <text x={plotPadding.left} y={volumeTop - 8} fontSize="12" fill="#94a3b8">
           成交量（真实数量，单位：股）
         </text>
-        <text x={plotPadding.left - 10} y={volumeTop + 10} textAnchor="end" fontSize="12" fill="#6b7280">
+        <text x={plotPadding.left - 10} y={volumeTop + 10} textAnchor="end" fontSize="12" fill="#94a3b8">
           {formatVolume(maxVolume)}
         </text>
-        <text x={plotPadding.left - 10} y={volumeTop + volumeAreaHeight / 2 + 4} textAnchor="end" fontSize="12" fill="#6b7280">
+        <text x={plotPadding.left - 10} y={volumeTop + volumeAreaHeight / 2 + 4} textAnchor="end" fontSize="12" fill="#94a3b8">
           {formatVolume(midVolume)}
         </text>
-        <text x={plotPadding.left - 10} y={volumeTop + volumeAreaHeight} textAnchor="end" fontSize="12" fill="#6b7280">
+        <text x={plotPadding.left - 10} y={volumeTop + volumeAreaHeight} textAnchor="end" fontSize="12" fill="#94a3b8">
           0
         </text>
       </svg>
       {interactive ? (
-        <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginTop: 12, color: "#374151" }}>
+        <div className="terminal-button-row" style={{ color: "#94a3b8" }}>
           <span>自动拐点: {autoPoints.length}</span>
           <span>最终拐点: {finalPoints.length}</span>
           <span>红K=上涨</span>
           <span>绿K=下跌</span>
+          <span>红三角=系统波峰</span>
+          <span>绿三角=系统波谷</span>
           <span>下方柱=成交量</span>
-          <span>绿倒三角=系统波峰</span>
           <span>黄三角=手动标记</span>
           {highlightRange === undefined ? null : <span>橙色高亮=样本波段</span>}
         </div>

@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from swinginsight.db.models.market_data import DailyPrice, TradeRecord
 from swinginsight.db.models.news import NewsRaw, SegmentNewsMap
+from swinginsight.db.models.pattern import PatternFeature, PatternFutureStat, PatternMatchResult, PatternWindow
 from swinginsight.db.models.prediction import PredictionResult
 from swinginsight.db.models.segment import SegmentFeature, SegmentLabel, SwingSegment
 from swinginsight.db.models.stock import StockBasic
@@ -418,6 +419,15 @@ def _build_demo_prices() -> list[dict[str, float | date]]:
 
 
 def _clear_existing_demo_rows(session: Session) -> None:
+    demo_window_ids = select(PatternWindow.id).where(PatternWindow.stock_code.in_(LEGACY_DEMO_STOCK_CODES))
+    session.execute(
+        delete(PatternMatchResult).where(
+            PatternMatchResult.target_window_id.in_(demo_window_ids) | PatternMatchResult.query_window_id.in_(demo_window_ids)
+        )
+    )
+    session.execute(delete(PatternFutureStat).where(PatternFutureStat.window_id.in_(demo_window_ids)))
+    session.execute(delete(PatternFeature).where(PatternFeature.window_id.in_(demo_window_ids)))
+    session.execute(delete(PatternWindow).where(PatternWindow.stock_code.in_(LEGACY_DEMO_STOCK_CODES)))
     session.execute(delete(PointRevisionLog).where(PointRevisionLog.stock_code.in_(LEGACY_DEMO_STOCK_CODES)))
     session.execute(delete(SegmentNewsMap).where(SegmentNewsMap.stock_code.in_(LEGACY_DEMO_STOCK_CODES)))
     session.execute(delete(SegmentLabel).where(SegmentLabel.stock_code.in_(LEGACY_DEMO_STOCK_CODES)))

@@ -68,7 +68,13 @@ class PatternSimilarityService:
 
         return sorted(windows, key=priority)[0]
 
-    def find_similar_windows(self, *, current_segment: SwingSegment, top_n: int = 300, top_k: int = 5) -> PatternSearchResult:
+    def find_similar_windows(
+        self,
+        *,
+        current_segment: SwingSegment,
+        top_n: int = 300,
+        top_k: int = 5,
+    ) -> PatternSearchResult:
         query_window = self.select_representative_window(current_segment)
         if query_window is None:
             return PatternSearchResult(similar_cases=[], group_stat=self._empty_group_stat(), query_window=None)
@@ -80,8 +86,12 @@ class PatternSimilarityService:
 
         candidates = self.session.scalars(
             select(PatternWindow)
-            .where(PatternWindow.id != query_window.id)
-            .where(PatternWindow.end_date < query_window.start_date)
+            .where(
+                PatternWindow.id != query_window.id,
+                PatternWindow.segment_id.is_not(None),
+                PatternWindow.segment_id != current_segment.id,
+                PatternWindow.end_date < query_window.start_date,
+            )
             .order_by(PatternWindow.end_date.asc(), PatternWindow.id.asc())
         ).all()
         ranked_candidates: list[tuple[float, PatternWindow, PatternFeature]] = []
@@ -97,9 +107,9 @@ class PatternSimilarityService:
         for _, candidate, feature_row in shortlist:
             candidate_features = self._feature_payload(candidate, feature_row)
             scores = calc_pattern_similarity(query_features, candidate_features)
-            segment = None
-            if candidate.segment_id is not None:
-                segment = self.session.scalar(select(SwingSegment).where(SwingSegment.id == candidate.segment_id))
+            segment = self.session.scalar(select(SwingSegment).where(SwingSegment.id == candidate.segment_id))
+            if segment is None or segment.id == current_segment.id:
+                continue
             future_stat = self.session.scalar(select(PatternFutureStat).where(PatternFutureStat.window_id == candidate.id))
             forward_returns = {
                 1: float(future_stat.ret_1d) if future_stat and future_stat.ret_1d is not None else None,
@@ -110,23 +120,23 @@ class PatternSimilarityService:
             }
             cases.append(
                 SimilarCase(
-                    segment_id=segment.id if segment is not None else int(candidate.segment_id or -1),
+                    segment_id=segment.id,
                     stock_code=candidate.stock_code,
                     score=scores["total_similarity"],
                     price_score=scores["sim_price"],
                     volume_score=scores["sim_volume"],
                     turnover_score=scores["sim_turnover"],
                     pattern_score=scores["sim_candle"],
-                    pct_change=float(segment.pct_change) if segment and segment.pct_change is not None else float(candidate.period_pct_change or 0),
-                    start_date=segment.start_date if segment is not None else candidate.start_date,
-                    end_date=segment.end_date if segment is not None else candidate.end_date,
+                    pct_change=float(segment.pct_change) if segment.pct_change is not None else float(candidate.period_pct_change or 0),
+                    start_date=segment.start_date,
+                    end_date=segment.end_date,
                     forward_returns=forward_returns,
                     window_id=candidate.id,
                     window_start_date=candidate.start_date,
                     window_end_date=candidate.end_date,
                     window_size=candidate.window_size,
-                    segment_start_date=segment.start_date if segment is not None else None,
-                    segment_end_date=segment.end_date if segment is not None else None,
+                    segment_start_date=segment.start_date,
+                    segment_end_date=segment.end_date,
                     candle_score=scores["sim_candle"],
                     trend_score=scores["sim_trend"],
                     vola_score=scores["sim_vola"],

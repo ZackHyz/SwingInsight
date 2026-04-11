@@ -162,38 +162,46 @@ export function TurningPointEditor({ stockCode, initialData, apiClient, onCommit
   }
 
   return (
-    <section>
-      <div>
-        <button type="button" onClick={() => setPendingAction("peak")}>
+    <div className="terminal-stack">
+      <div className="turning-point-toolbar terminal-button-row">
+        <button className={pendingAction === "peak" ? "terminal-button terminal-button--primary" : "terminal-button"} type="button" onClick={() => setPendingAction("peak")}>
           标记波峰
         </button>
-        <button type="button" onClick={() => setPendingAction("trough")}>
+        <button
+          className={pendingAction === "trough" ? "terminal-button terminal-button--primary" : "terminal-button"}
+          type="button"
+          onClick={() => setPendingAction("trough")}
+        >
           标记波谷
         </button>
-        <button type="button" onClick={handleReset}>
+        <button className="terminal-button" type="button" onClick={handleReset}>
           撤销本次编辑
         </button>
-        <button type="button" onClick={handleDeleteSelected} disabled={selectedPointKey === null}>
+        <button className="terminal-button" type="button" onClick={handleDeleteSelected} disabled={selectedPointKey === null}>
           删除选中点
         </button>
-        <button type="button" onClick={handleSave} disabled={saveStatus === "saving"}>
+        <button className="terminal-button terminal-button--primary" type="button" onClick={handleSave} disabled={saveStatus === "saving"}>
           保存修正
         </button>
       </div>
 
-      <KlineChart
-        prices={initialData.prices}
-        autoPoints={initialData.auto_turning_points}
-        finalPoints={sortedDraftPoints}
-        onSelectPrice={handleSelectPrice}
-      />
+      <div className="terminal-chart-frame terminal-chart-frame--workspace turning-point-editor__chart">
+        <KlineChart
+          prices={initialData.prices}
+          autoPoints={initialData.auto_turning_points}
+          finalPoints={sortedDraftPoints}
+          onSelectPrice={handleSelectPrice}
+          height={760}
+        />
+      </div>
 
-      <section>
+      <section className="terminal-stack">
         <h2>最终拐点</h2>
-        <ul>
+        <ul className="terminal-list">
           {sortedDraftPoints.map((point, index) => (
             <li key={getPointKey(point, index)}>
               <button
+                className="terminal-button"
                 type="button"
                 onClick={() => setSelectedPointKey(getPointKey(point, index))}
               >
@@ -207,9 +215,9 @@ export function TurningPointEditor({ stockCode, initialData, apiClient, onCommit
 
       <TradeMarkerLayer count={initialData.trade_markers.length} />
 
-      {rebuildMessage === null ? null : <p>{rebuildMessage}</p>}
-      {saveStatus === "success" ? <p>保存成功</p> : null}
-      {saveStatus === "error" ? <p>保存失败</p> : null}
-    </section>
+      {rebuildMessage === null ? null : <div className="terminal-banner terminal-banner--info">{rebuildMessage}</div>}
+      {saveStatus === "success" ? <div className="terminal-banner terminal-banner--info">保存成功</div> : null}
+      {saveStatus === "error" ? <div className="terminal-banner terminal-banner--error">保存失败</div> : null}
+    </div>
   );
 }

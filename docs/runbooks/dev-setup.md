@@ -37,6 +37,8 @@ pnpm test -- --run
 pnpm typecheck
 ```
 
+The frontend now renders as a terminal-style research workspace, but the local verification commands stay the same.
+
 Install Playwright browsers when you need browser smoke coverage:
 
 ```bash

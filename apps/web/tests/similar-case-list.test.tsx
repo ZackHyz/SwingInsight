@@ -4,8 +4,9 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { SimilarCaseList } from "../src/components/similar-case-list";
+import type { SegmentChartWindowData } from "../src/lib/api";
 
-function buildChartWindow(segmentId: number) {
+function buildChartWindow(segmentId: number): SegmentChartWindowData {
   return {
     segment: {
       id: segmentId,
@@ -28,7 +29,7 @@ function buildChartWindow(segmentId: number) {
   };
 }
 
-function buildCurrentChartWindow() {
+function buildCurrentChartWindow(): SegmentChartWindowData {
   return {
     segment: {
       id: 0,
@@ -103,11 +104,11 @@ describe("similar case list", () => {
     expect(screen.getByText(/K线形态相似 90.1%/)).toBeTruthy();
     expect(screen.getByText(/趋势背景相似 68.8%/)).toBeTruthy();
     expect(screen.getByText(/波动率相似 74.4%/)).toBeTruthy();
-    expect(screen.getByText(/样本区间涨跌幅 \+12.36%/)).toBeTruthy();
-    expect(screen.getByText(/样本后续1日涨跌幅 \+1.50%/)).toBeTruthy();
-    expect(screen.getByText(/样本后续3日涨跌幅 -2.20%/)).toBeTruthy();
-    expect(screen.getByText(/样本后续5日涨跌幅 \+4.80%/)).toBeTruthy();
-    expect(screen.getByText(/样本后续10日涨跌幅 \+12.60%/)).toBeTruthy();
+    expect(document.body.textContent).toContain("样本区间涨跌幅 +12.36%");
+    expect(document.body.textContent).toContain("样本后续1日涨跌幅 +1.50%");
+    expect(document.body.textContent).toContain("样本后续3日涨跌幅 -2.20%");
+    expect(document.body.textContent).toContain("样本后续5日涨跌幅 +4.80%");
+    expect(document.body.textContent).toContain("样本后续10日涨跌幅 +12.60%");
   });
 
   it("opens a modal with current and historical charts", async () => {
@@ -156,6 +157,10 @@ describe("similar case list", () => {
     await waitFor(() => {
       expect(screen.getByRole("dialog", { name: "样本 12 K线对比" })).toBeTruthy();
     });
+    expect(screen.getByRole("dialog", { name: "样本 12 K线对比" }).className).toContain("terminal-dialog--fullscreen");
+    expect(screen.getByRole("dialog", { name: "样本 12 K线对比" }).parentElement).toBe(document.body);
+    expect(screen.getByTestId("similar-case-dialog-panel").className).toContain("terminal-dialog__panel--fullscreen");
+    expect(screen.getByTestId("similar-case-dialog-content").className).toContain("terminal-chart-grid--comparison");
     expect(screen.getByText("当前相似窗口")).toBeTruthy();
     expect(screen.getByText("历史相似窗口")).toBeTruthy();
     expect(screen.getAllByTestId("kline-canvas")).toHaveLength(2);
@@ -164,7 +169,7 @@ describe("similar case list", () => {
   });
 
   it("keeps each chart window intact instead of trimming historical context to match current", async () => {
-    const currentChartWindow = {
+    const currentChartWindow: SegmentChartWindowData = {
       segment: {
         id: 0,
         stock_code: "600010",
@@ -190,7 +195,7 @@ describe("similar case list", () => {
         { point_date: "2026-03-05", point_type: "trough", point_price: 1.94, source_type: "system" },
       ],
     };
-    const historicalChartWindow = {
+    const historicalChartWindow: SegmentChartWindowData = {
       segment: {
         id: 12,
         stock_code: "600157",
