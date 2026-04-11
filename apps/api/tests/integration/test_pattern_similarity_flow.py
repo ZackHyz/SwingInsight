@@ -66,3 +66,11 @@ def test_pattern_similarity_flow_runs_end_to_end() -> None:
     assert payload["similar_cases"][0]["window_end_date"] is not None
     assert payload["similar_cases"][0]["segment_start_date"] is not None
     assert payload["similar_cases"][0]["segment_end_date"] is not None
+    query_start = payload["query_window"]["start_date"]
+    assert all(
+        item["window_end_date"] < query_start
+        for item in payload["similar_cases"]
+        if item["window_end_date"] is not None
+    )
+    positive_segment_ids = [item["segment_id"] for item in payload["similar_cases"] if item["segment_id"] is not None and item["segment_id"] > 0]
+    assert len(positive_segment_ids) == len(set(positive_segment_ids))

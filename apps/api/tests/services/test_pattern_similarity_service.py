@@ -78,7 +78,9 @@ def test_pattern_similarity_service_excludes_future_windows_from_candidates() ->
             )
         ).all()
     )
-    assert {case.window_id for case in result.similar_cases} == eligible_window_ids
+    returned_window_ids = {case.window_id for case in result.similar_cases}
+    assert returned_window_ids
+    assert returned_window_ids.issubset(eligible_window_ids)
     assert all(case.window_end_date < query_start for case in result.similar_cases if case.window_end_date is not None)
 
 
@@ -221,3 +223,67 @@ def test_select_representative_window_prefers_segment_core_pattern_over_midpoint
 
     assert representative is not None
     assert representative.id == windows[0].id
+
+
+def test_pattern_similarity_service_deduplicates_results_by_segment_and_stock() -> None:
+    from swinginsight.services.pattern_feature_service import PatternFeatureService
+    from swinginsight.services.pattern_similarity_service import PatternSimilarityService
+    from swinginsight.services.pattern_window_service import PatternWindowService
+
+    session = build_session()
+    segments = seed_prediction_context(session)
+
+    for stock_code in {"000001", "600157"}:
+        PatternWindowService(session).build_windows(stock_code=stock_code)
+        PatternFeatureService(session).materialize(stock_code=stock_code)
+        PatternWindowService(session).materialize_future_stats(stock_code=stock_code)
+
+    result = PatternSimilarityService(session).find_similar_windows(current_segment=segments[0], top_k=20)
+
+    positive_segment_ids = [case.segment_id for case in result.similar_cases if case.segment_id > 0]
+    assert len(positive_segment_ids) == len(set(positive_segment_ids))
+
+    stock_counts: dict[str, int] = {}
+    for case in result.similar_cases:
+        stock_counts[case.stock_code] = stock_counts.get(case.stock_code, 0) + 1
+    assert all(count <= 2 for count in stock_counts.values())
+
+
+def test_feature_payload_uses_window_turning_points_instead_of_price_extrema() -> None:
+    from swinginsight.db.models.pattern import PatternFeature, PatternWindow
+    from swinginsight.services.pattern_similarity_service import PatternSimilarityService
+
+    session = build_session()
+    window = PatternWindow(
+        window_uid="pw-turning-points",
+        stock_code="000001",
+        start_date=date(2024, 1, 1),
+        end_date=date(2024, 1, 9),
+        window_size=7,
+        start_close=10.0,
+        end_close=10.4,
+        period_pct_change=4.0,
+        highest_day_pos=1,
+        lowest_day_pos=5,
+        trend_label="sideways",
+        feature_version="pattern:v1",
+    )
+    session.add(window)
+    session.flush()
+
+    feature = PatternFeature(
+        window_id=window.id,
+        price_seq_json=[1.0, 0.99, 1.02, 1.03, 1.01, 1.00, 1.04],
+        candle_feat_json=[0.1] * 35,
+        volume_seq_json=[1.0] * 7,
+        turnover_seq_json=[1.0] * 7,
+        trend_context_json=[1.0] * 10,
+        vola_context_json=[0.1] * 5,
+        coarse_vector_json=[0.0] * 21,
+        feature_version="pattern:v1",
+    )
+
+    payload = PatternSimilarityService(session)._feature_payload(window, feature)
+
+    assert payload["highest_day_pos"] == 1
+    assert payload["lowest_day_pos"] == 5

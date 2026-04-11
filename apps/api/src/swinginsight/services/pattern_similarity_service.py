@@ -76,7 +76,7 @@ class PatternSimilarityService:
         query_feature_row = self.session.scalar(select(PatternFeature).where(PatternFeature.window_id == query_window.id))
         if query_feature_row is None:
             return PatternSearchResult(similar_cases=[], group_stat=self._empty_group_stat(), query_window=None)
-        query_features = self._feature_payload(query_feature_row)
+        query_features = self._feature_payload(query_window, query_feature_row)
 
         candidates = self.session.scalars(
             select(PatternWindow)
@@ -95,7 +95,7 @@ class PatternSimilarityService:
         shortlist = ranked_candidates[:top_n]
         cases: list[SimilarCase] = []
         for _, candidate, feature_row in shortlist:
-            candidate_features = self._feature_payload(feature_row)
+            candidate_features = self._feature_payload(candidate, feature_row)
             scores = calc_pattern_similarity(query_features, candidate_features)
             segment = None
             if candidate.segment_id is not None:
@@ -141,7 +141,7 @@ class PatternSimilarityService:
                 case.window_id or 0,
             )
         )
-        top_cases = cases[:top_k]
+        top_cases = self._deduplicate_cases(cases, top_k=top_k)
         return PatternSearchResult(
             similar_cases=top_cases,
             group_stat=self._summarize_future_returns(top_cases),
@@ -154,15 +154,15 @@ class PatternSimilarityService:
             },
         )
 
-    def _feature_payload(self, row: PatternFeature) -> dict[str, object]:
+    def _feature_payload(self, window: PatternWindow, row: PatternFeature) -> dict[str, object]:
         price_seq = list(row.price_seq_json or [])
         candle_feat = list(row.candle_feat_json or [])
         return {
             "price_seq": price_seq,
             "candle_feat": candle_feat,
             "bull_flags": [int(candle_feat[index]) for index in range(4, len(candle_feat), 5)],
-            "highest_day_pos": price_seq.index(max(price_seq)) if price_seq else 0,
-            "lowest_day_pos": price_seq.index(min(price_seq)) if price_seq else 0,
+            "highest_day_pos": int(window.highest_day_pos or 0),
+            "lowest_day_pos": int(window.lowest_day_pos or 0),
             "volume_seq": list(row.volume_seq_json or []),
             "turnover_seq": list(row.turnover_seq_json or []),
             "trend_context": list(row.trend_context_json or []),
@@ -210,7 +210,7 @@ class PatternSimilarityService:
         if feature_row is None or not segment_closes or segment_prototype is None:
             return round(0.7 * midpoint_score + 0.3 * max(0.0, 1.0 - pct_gap / 100.0), 4)
 
-        feature_payload = self._feature_payload(feature_row)
+        feature_payload = self._feature_payload(window, feature_row)
         target_price_seq = self._normalize_trajectory(
             self._resample_series(segment_closes, len(feature_payload["price_seq"]))
         )
@@ -285,6 +285,23 @@ class PatternSimilarityService:
         if baseline == 0:
             return [float(value) for value in values]
         return [round((float(value) / baseline) - 1.0, 6) for value in values]
+
+    def _deduplicate_cases(self, cases: list[SimilarCase], *, top_k: int) -> list[SimilarCase]:
+        accepted: list[SimilarCase] = []
+        seen_segments: set[int] = set()
+        stock_counts: dict[str, int] = {}
+        for case in cases:
+            if case.segment_id > 0 and case.segment_id in seen_segments:
+                continue
+            if stock_counts.get(case.stock_code, 0) >= 2:
+                continue
+            accepted.append(case)
+            if case.segment_id > 0:
+                seen_segments.add(case.segment_id)
+            stock_counts[case.stock_code] = stock_counts.get(case.stock_code, 0) + 1
+            if len(accepted) >= top_k:
+                break
+        return accepted
 
     def _summarize_future_returns(self, cases: list[SimilarCase]) -> dict[str, float]:
         return {
