@@ -7,9 +7,10 @@ from statistics import mean, median
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from swinginsight.db.models.market_data import DailyPrice
 from swinginsight.db.models.pattern import PatternFeature, PatternFutureStat, PatternWindow
 from swinginsight.db.models.segment import SwingSegment
-from swinginsight.domain.prediction.pattern_similarity import calc_pattern_similarity
+from swinginsight.domain.prediction.pattern_similarity import calc_pattern_similarity, sim_candle, sim_price
 from swinginsight.services.prediction_service import SimilarCase
 
 
@@ -34,12 +35,36 @@ class PatternSimilarityService:
             return None
 
         midpoint = current_segment.start_date + (current_segment.end_date - current_segment.start_date) / 2
+        features_by_window_id = self._features_by_window_id([window.id for window in windows])
+        segment_price_rows = self.session.scalars(
+            select(DailyPrice)
+            .where(
+                DailyPrice.stock_code == current_segment.stock_code,
+                DailyPrice.trade_date >= current_segment.start_date,
+                DailyPrice.trade_date <= current_segment.end_date,
+            )
+            .order_by(DailyPrice.trade_date.asc(), DailyPrice.id.asc())
+        ).all()
+        segment_closes = [float(row.close_price) for row in segment_price_rows if row.close_price is not None]
+        max_date_gap = max(
+            abs(((window.start_date + (window.end_date - window.start_date) / 2) - midpoint).days) for window in windows
+        )
+        prototype = self._build_segment_candle_prototype(windows, features_by_window_id, segment_closes)
 
-        def priority(window: PatternWindow) -> tuple[int, float, int]:
+        def priority(window: PatternWindow) -> tuple[float, int, float, int]:
             center = window.start_date + (window.end_date - window.start_date) / 2
             date_gap = abs((center - midpoint).days)
             pct_gap = abs(float(window.period_pct_change or 0) - float(current_segment.pct_change or 0))
-            return (date_gap, pct_gap, window.id)
+            representative_score = self._representative_score(
+                window=window,
+                feature_row=features_by_window_id.get(window.id),
+                segment_closes=segment_closes,
+                segment_prototype=prototype,
+                date_gap=date_gap,
+                max_date_gap=max_date_gap,
+                segment_pct_change=float(current_segment.pct_change or 0),
+            )
+            return (-representative_score, date_gap, pct_gap, window.id)
 
         return sorted(windows, key=priority)[0]
 
@@ -159,6 +184,107 @@ class PatternSimilarityService:
         if left_norm == 0 or right_norm == 0:
             return 0.0
         return (numerator / (left_norm * right_norm) + 1.0) / 2.0
+
+    def _features_by_window_id(self, window_ids: list[int]) -> dict[int, PatternFeature]:
+        if not window_ids:
+            return {}
+        return {
+            row.window_id: row
+            for row in self.session.scalars(select(PatternFeature).where(PatternFeature.window_id.in_(window_ids))).all()
+        }
+
+    def _representative_score(
+        self,
+        *,
+        window: PatternWindow,
+        feature_row: PatternFeature | None,
+        segment_closes: list[float],
+        segment_prototype: dict[str, object] | None,
+        date_gap: int,
+        max_date_gap: int,
+        segment_pct_change: float,
+    ) -> float:
+        pct_gap = abs(float(window.period_pct_change or 0) - segment_pct_change)
+        midpoint_score = 1.0 if max_date_gap == 0 else max(0.0, 1.0 - (date_gap / max_date_gap))
+        amplitude_score = self._amplitude_coverage(float(window.period_pct_change or 0), segment_pct_change)
+        if feature_row is None or not segment_closes or segment_prototype is None:
+            return round(0.7 * midpoint_score + 0.3 * max(0.0, 1.0 - pct_gap / 100.0), 4)
+
+        feature_payload = self._feature_payload(feature_row)
+        target_price_seq = self._normalize_trajectory(
+            self._resample_series(segment_closes, len(feature_payload["price_seq"]))
+        )
+        price_score = sim_price(self._normalize_trajectory(feature_payload["price_seq"]), target_price_seq)
+        candle_score = sim_candle(feature_payload, segment_prototype)
+        return round(
+            0.45 * price_score + 0.25 * candle_score + 0.2 * midpoint_score + 0.1 * amplitude_score,
+            4,
+        )
+
+    def _build_segment_candle_prototype(
+        self,
+        windows: list[PatternWindow],
+        features_by_window_id: dict[int, PatternFeature],
+        segment_closes: list[float],
+    ) -> dict[str, object] | None:
+        candle_vectors = [
+            list(feature_row.candle_feat_json or [])
+            for window in windows
+            if (feature_row := features_by_window_id.get(window.id)) is not None and feature_row.candle_feat_json
+        ]
+        if not candle_vectors or not segment_closes:
+            return None
+
+        size = min(len(vector) for vector in candle_vectors)
+        averaged = [
+            sum(float(vector[index]) for vector in candle_vectors) / len(candle_vectors)
+            for index in range(size)
+        ]
+        bull_flags = [1 if averaged[index] >= 0.5 else 0 for index in range(4, size, 5)]
+        resampled = self._resample_series(segment_closes, max(len(bull_flags), 1))
+        highest_day_pos = resampled.index(max(resampled)) if resampled else 0
+        lowest_day_pos = resampled.index(min(resampled)) if resampled else 0
+        return {
+            "candle_feat": averaged,
+            "bull_flags": bull_flags,
+            "highest_day_pos": highest_day_pos,
+            "lowest_day_pos": lowest_day_pos,
+        }
+
+    def _resample_series(self, values: list[float], target_size: int) -> list[float]:
+        if not values or target_size <= 0:
+            return []
+        if len(values) == target_size:
+            return [float(value) for value in values]
+        if target_size == 1:
+            return [float(values[0])]
+        step = (len(values) - 1) / (target_size - 1)
+        resampled: list[float] = []
+        for index in range(target_size):
+            position = index * step
+            left = int(position)
+            right = min(left + 1, len(values) - 1)
+            if left == right:
+                resampled.append(float(values[left]))
+                continue
+            fraction = position - left
+            interpolated = float(values[left]) + (float(values[right]) - float(values[left])) * fraction
+            resampled.append(interpolated)
+        return resampled
+
+    def _amplitude_coverage(self, window_pct_change: float, segment_pct_change: float) -> float:
+        denominator = abs(segment_pct_change)
+        if denominator == 0:
+            return 1.0 if abs(window_pct_change) == 0 else 0.0
+        return max(0.0, min(1.0, abs(window_pct_change) / denominator))
+
+    def _normalize_trajectory(self, values: list[float]) -> list[float]:
+        if not values:
+            return []
+        baseline = float(values[0])
+        if baseline == 0:
+            return [float(value) for value in values]
+        return [round((float(value) / baseline) - 1.0, 6) for value in values]
 
     def _summarize_future_returns(self, cases: list[SimilarCase]) -> dict[str, float]:
         return {

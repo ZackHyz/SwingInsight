@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 import importlib.util
 from pathlib import Path
 import sys
@@ -80,3 +80,144 @@ def test_pattern_similarity_service_excludes_future_windows_from_candidates() ->
     )
     assert {case.window_id for case in result.similar_cases} == eligible_window_ids
     assert all(case.window_end_date < query_start for case in result.similar_cases if case.window_end_date is not None)
+
+
+def test_select_representative_window_prefers_segment_core_pattern_over_midpoint() -> None:
+    from swinginsight.db.models.market_data import DailyPrice
+    from swinginsight.db.models.pattern import PatternFeature, PatternWindow
+    from swinginsight.db.models.segment import SwingSegment
+    from swinginsight.services.pattern_similarity_service import PatternSimilarityService
+
+    session = build_session()
+    segment = SwingSegment(
+        segment_uid="seg-core-pattern",
+        stock_code="300001",
+        start_date=date(2024, 1, 2),
+        end_date=date(2024, 1, 12),
+        start_point_type="trough",
+        end_point_type="peak",
+        start_price=10.0,
+        end_price=16.5,
+        pct_change=20.0,
+        duration_days=10,
+        max_drawdown_pct=-2.0,
+        max_upside_pct=22.0,
+        avg_daily_change_pct=1.8,
+        segment_type="up_swing",
+        trend_direction="up",
+        source_version="manual:latest",
+        is_final=True,
+    )
+    session.add(segment)
+    session.flush()
+
+    closes = [10.0, 10.4, 11.1, 11.8, 12.7, 13.6, 14.4, 15.2, 16.0, 16.2, 16.5]
+    for offset, close_price in enumerate(closes):
+        trade_date = segment.start_date + timedelta(days=offset)
+        session.add(
+            DailyPrice(
+                stock_code=segment.stock_code,
+                trade_date=trade_date,
+                open_price=close_price - 0.2,
+                high_price=close_price + 0.3,
+                low_price=close_price - 0.4,
+                close_price=close_price,
+                volume=1_000_000 + offset * 10_000,
+                turnover_rate=2.0 + offset * 0.1,
+                adj_type="qfq",
+                data_source="test",
+            )
+        )
+
+    windows = [
+        PatternWindow(
+            window_uid="seg-core-pattern:w1",
+            stock_code=segment.stock_code,
+            segment_id=segment.id,
+            start_date=date(2024, 1, 2),
+            end_date=date(2024, 1, 8),
+            window_size=7,
+            start_close=10.0,
+            end_close=14.4,
+            period_pct_change=18.0,
+            highest_day_pos=6,
+            lowest_day_pos=0,
+            trend_label="up",
+            feature_version="pattern:v1",
+        ),
+        PatternWindow(
+            window_uid="seg-core-pattern:w2",
+            stock_code=segment.stock_code,
+            segment_id=segment.id,
+            start_date=date(2024, 1, 4),
+            end_date=date(2024, 1, 10),
+            window_size=7,
+            start_close=11.1,
+            end_close=16.0,
+            period_pct_change=20.0,
+            highest_day_pos=5,
+            lowest_day_pos=2,
+            trend_label="up",
+            feature_version="pattern:v1",
+        ),
+        PatternWindow(
+            window_uid="seg-core-pattern:w3",
+            stock_code=segment.stock_code,
+            segment_id=segment.id,
+            start_date=date(2024, 1, 6),
+            end_date=date(2024, 1, 12),
+            window_size=7,
+            start_close=12.7,
+            end_close=16.5,
+            period_pct_change=12.0,
+            highest_day_pos=6,
+            lowest_day_pos=0,
+            trend_label="up",
+            feature_version="pattern:v1",
+        ),
+    ]
+    session.add_all(windows)
+    session.flush()
+
+    feature_rows = [
+        PatternFeature(
+            window_id=windows[0].id,
+            price_seq_json=[10.0, 10.4, 11.1, 11.8, 12.7, 13.6, 14.4],
+            candle_feat_json=[0.7, 0.2, 0.1, 0.0, 1.0] * 7,
+            volume_seq_json=[1.0] * 7,
+            turnover_seq_json=[1.0] * 7,
+            trend_context_json=[1.0, 0.9, 0.8],
+            vola_context_json=[0.2, 0.2, 0.2],
+            coarse_vector_json=[0.9, 0.8, 0.7],
+            feature_version="pattern:v1",
+        ),
+        PatternFeature(
+            window_id=windows[1].id,
+            price_seq_json=[11.1, 10.8, 11.5, 10.6, 11.0, 10.4, 10.9],
+            candle_feat_json=[0.0, 0.9, 0.8, 0.7, 0.0] * 7,
+            volume_seq_json=[1.0] * 7,
+            turnover_seq_json=[1.0] * 7,
+            trend_context_json=[0.2, 0.9, 0.1],
+            vola_context_json=[0.7, 0.8, 0.7],
+            coarse_vector_json=[0.4, 0.4, 0.4],
+            feature_version="pattern:v1",
+        ),
+        PatternFeature(
+            window_id=windows[2].id,
+            price_seq_json=[12.7, 13.3, 13.9, 14.6, 15.3, 16.0, 16.5],
+            candle_feat_json=[0.6, 0.2, 0.1, 0.0, 1.0] * 7,
+            volume_seq_json=[1.0] * 7,
+            turnover_seq_json=[1.0] * 7,
+            trend_context_json=[0.9, 0.8, 0.7],
+            vola_context_json=[0.3, 0.3, 0.3],
+            coarse_vector_json=[0.8, 0.7, 0.6],
+            feature_version="pattern:v1",
+        ),
+    ]
+    session.add_all(feature_rows)
+    session.commit()
+
+    representative = PatternSimilarityService(session).select_representative_window(segment)
+
+    assert representative is not None
+    assert representative.id == windows[0].id
