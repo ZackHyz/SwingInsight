@@ -423,6 +423,76 @@ def test_ensure_stock_ready_skips_remote_refresh_outside_market_hours(monkeypatc
     assert ready is True
 
 
+def test_ensure_stock_ready_refreshes_stale_prices_outside_market_hours(monkeypatch) -> None:
+    from swinginsight.db.models.market_data import DailyPrice
+    from swinginsight.db.models.stock import StockBasic
+    from swinginsight.ingest.daily_price_importer import ImportResult
+    from swinginsight.services import stock_research_service as stock_research_module
+
+    session = build_session()
+    session.add(
+        StockBasic(
+            stock_code="600010",
+            stock_name="包钢股份",
+            market="A",
+            industry="Steel",
+            concept_tags=[],
+        )
+    )
+    session.add(
+        DailyPrice(
+            stock_code="600010",
+            trade_date=date(2026, 4, 1),
+            open_price=2.0,
+            high_price=2.1,
+            low_price=1.9,
+            close_price=2.05,
+            adj_type="qfq",
+            data_source="akshare",
+        )
+    )
+    session.commit()
+
+    refresh_calls: list[tuple[str, date | None]] = []
+
+    monkeypatch.setattr(
+        stock_research_module,
+        "current_market_datetime",
+        lambda: datetime(2026, 4, 15, 20, 0, tzinfo=ZoneInfo("Asia/Shanghai")),
+    )
+    monkeypatch.setattr(
+        stock_research_module.StockResearchService,
+        "_refresh_live_prices",
+        lambda self, stock_code, latest_trade_date: (
+            refresh_calls.append((stock_code, latest_trade_date)),
+            ImportResult(inserted=0, updated=0, skipped=1),
+        )[1],
+    )
+    monkeypatch.setattr(
+        stock_research_module.StockResearchService,
+        "_refresh_news_window",
+        lambda self, stock_code, anchor_date: stock_research_module.NewsRefreshResult(
+            start_date=anchor_date,
+            end_date=anchor_date,
+            inserted=0,
+            processed_count=0,
+            duplicates=0,
+            point_mappings=0,
+            segment_mappings=0,
+        ),
+    )
+    monkeypatch.setattr(
+        stock_research_module.StockResearchService,
+        "_needs_rebuild",
+        lambda self, *, stock_code, latest_trade_date: False,
+    )
+
+    ready = stock_research_module.StockResearchService(session).ensure_stock_ready("600010")
+
+    assert ready is True
+    assert refresh_calls == [("600010", date(2026, 4, 1))]
+
+
 def test_ensure_stock_ready_skips_remote_refresh_for_demo_seeded_stock(monkeypatch) -> None:
     from swinginsight.db.models.market_data import DailyPrice
     from swinginsight.db.models.stock import StockBasic

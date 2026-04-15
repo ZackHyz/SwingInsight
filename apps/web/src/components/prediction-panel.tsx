@@ -1,9 +1,11 @@
 import { SimilarCaseList } from "./similar-case-list";
+import { PatternScoreCard } from "./pattern-score-card";
 import type { ApiClient, QueryWindow, SegmentChartWindowData, StockResearchData } from "../lib/api";
 import { getMarketValueClass } from "../lib/market-tone";
+import { usePatternInsight } from "../hooks/use-pattern-insight";
 
 type PredictionPanelProps = {
-  apiClient: Pick<ApiClient, "getSegmentChartWindow">;
+  apiClient: Pick<ApiClient, "getSegmentChartWindow" | "getPatternScore" | "getPatternSimilarCases" | "getPatternGroupStat">;
   stockCode: string;
   prices: StockResearchData["prices"];
   autoPoints: StockResearchData["auto_turning_points"];
@@ -137,6 +139,7 @@ function getProbabilityValueClass(key: string): string {
 }
 
 export function PredictionPanel({ apiClient, stockCode, prices, autoPoints, finalPoints, currentState }: PredictionPanelProps) {
+  const patternInsight = usePatternInsight(stockCode, apiClient);
   const probabilities = currentState.probabilities ?? {};
   const keyFeatures = currentState.key_features ?? {};
   const riskFlags = currentState.risk_flags ?? {};
@@ -194,6 +197,10 @@ export function PredictionPanel({ apiClient, stockCode, prices, autoPoints, fina
           ))}
           </ul>
         </section>
+        <PatternScoreCard
+          score={patternInsight.status === "ready" ? patternInsight.data.score : null}
+          loading={patternInsight.status === "loading"}
+        />
         {groupStat === undefined ? null : (
           <section className="terminal-stack">
             <h3>相似样本统计</h3>

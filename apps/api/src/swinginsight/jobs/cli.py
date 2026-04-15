@@ -4,7 +4,11 @@ import argparse
 from datetime import date
 
 from swinginsight.jobs.align_news import align_news
+from swinginsight.jobs.backfill_score_log import backfill_score_log
+from swinginsight.jobs.backtest_pattern_score import backtest_pattern_score
 from swinginsight.jobs.build_pattern_windows import build_pattern_windows
+from swinginsight.jobs.calibrate_pattern_score import calibrate_pattern_score, verify_calibration
+from swinginsight.jobs.diagnose_feature_signal import diagnose_feature_signal
 from swinginsight.jobs.import_market_data import import_daily_prices
 from swinginsight.jobs.import_news import import_news
 from swinginsight.jobs.materialize_features import materialize_features
@@ -75,10 +79,65 @@ def build_parser() -> argparse.ArgumentParser:
         help="为滑窗样本生成粗召回和精排特征",
     )
     pattern_features.add_argument("--stock-code", required=True)
+    pattern_features.add_argument(
+        "--feature-set",
+        action="append",
+        choices=["coarse", "volume_context", "price_position", "trend_context"],
+    )
 
     predict = subparsers.add_parser("predict-state")
     predict.add_argument("--stock-code", required=True)
     predict.add_argument("--predict-date", required=True)
+
+    score_backfill = subparsers.add_parser(
+        "backfill-score-log",
+        help="回填 score_log 的实际 5/10 日收益与涨跌结果",
+    )
+    score_backfill.add_argument("--stock-code")
+
+    pattern_backtest = subparsers.add_parser(
+        "backtest-pattern-score",
+        help="按时序隔离规则回测历史 pattern score 预测质量",
+    )
+    pattern_backtest.add_argument("--stock-code", required=True)
+    pattern_backtest.add_argument("--start", required=True)
+    pattern_backtest.add_argument("--end", required=True)
+    pattern_backtest.add_argument("--horizon-days", nargs="+", required=True, type=int)
+    pattern_backtest.add_argument("--top-k", type=int, default=10)
+    pattern_backtest.add_argument("--min-reference-size", type=int, default=10)
+    pattern_backtest.add_argument("--min-similarity", type=float, default=0.70)
+    pattern_backtest.add_argument("--min-samples", type=int, default=5)
+    pattern_backtest.add_argument("--feature-names", nargs="+")
+    pattern_backtest.add_argument("--min-sample-count", type=int, default=5)
+
+    signal_diagnose = subparsers.add_parser(
+        "diagnose-feature-signal",
+        help="诊断 coarse 特征各维度与未来涨跌的相关性",
+    )
+    signal_diagnose.add_argument("--stock-code", required=True)
+    signal_diagnose.add_argument("--horizon-days", type=int, default=5)
+    signal_diagnose.add_argument("--min-sample-count", type=int, default=5)
+    signal_diagnose.add_argument("--feature-names", nargs="+")
+
+    calibrate_parser = subparsers.add_parser(
+        "calibrate-pattern-score",
+        help="基于 backtest_result 训练概率校准模型（isotonic/platt）",
+    )
+    calibrate_parser.add_argument("--stock-code", required=True)
+    calibrate_parser.add_argument("--horizon-days", nargs="+", type=int, default=[5, 10])
+    calibrate_parser.add_argument("--method", choices=["isotonic", "platt"], default="isotonic")
+    calibrate_parser.add_argument("--train-ratio", type=float, default=0.7)
+    calibrate_parser.add_argument("--min-sample-count", type=int, default=5)
+
+    verify_parser = subparsers.add_parser(
+        "verify-calibration",
+        help="输出校准后的验证集曲线与单调性报告",
+    )
+    verify_parser.add_argument("--stock-code", required=True)
+    verify_parser.add_argument("--horizon-days", type=int, default=10)
+    verify_parser.add_argument("--method", choices=["isotonic", "platt"], default="isotonic")
+    verify_parser.add_argument("--train-ratio", type=float, default=0.7)
+    verify_parser.add_argument("--min-sample-count", type=int, default=5)
     return parser
 
 
@@ -175,10 +234,11 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "materialize-pattern-features":
-        result = materialize_pattern_features(stock_code=args.stock_code)
+        feature_sets = args.feature_set if args.feature_set else ["coarse"]
+        result = materialize_pattern_features(stock_code=args.stock_code, feature_sets=feature_sets)
         print(
             f"materialize-pattern-features stock_code={args.stock_code} "
-            f"windows={result.windows} features={result.features} skipped={result.skipped}"
+            f"feature_sets={feature_sets} windows={result.windows} features={result.features} skipped={result.skipped}"
         )
         return 0
 
@@ -188,6 +248,115 @@ def main(argv: list[str] | None = None) -> int:
             f"predict-state stock_code={args.stock_code} predict_date={args.predict_date} "
             f"current_state={result.current_state} up_prob_10d={result.up_prob_10d:.4f}"
         )
+        return 0
+
+    if args.command == "backfill-score-log":
+        result = backfill_score_log(stock_code=args.stock_code)
+        scope = args.stock_code if args.stock_code else "ALL"
+        print(f"backfill-score-log stock_code={scope} updated={result.updated}")
+        return 0
+
+    if args.command == "backtest-pattern-score":
+        result = backtest_pattern_score(
+            stock_code=args.stock_code,
+            start=parse_optional_date(args.start),
+            end=parse_optional_date(args.end),
+            horizon_days=list(args.horizon_days),
+            top_k=args.top_k,
+            min_reference_size=args.min_reference_size,
+            min_similarity=args.min_similarity,
+            min_samples=args.min_samples,
+            feature_names=args.feature_names,
+            min_sample_count=args.min_sample_count,
+        )
+        print(
+            f"backtest-pattern-score stock_code={args.stock_code} "
+            f"processed_queries={result.processed_queries} written_rows={result.written_rows} "
+            f"min_similarity={args.min_similarity:.2f} min_samples={args.min_samples} "
+            f"feature_names={args.feature_names or 'ALL'}"
+        )
+        for summary in result.summaries:
+            print(
+                "  horizon={horizon} rows={rows} coverage={coverage} brier={brier} "
+                "sample_count_dist={sample_count_dist} tiers={tiers}".format(
+                    horizon=summary["horizon"],
+                    rows=summary["rows"],
+                    coverage=summary["coverage_rate"],
+                    brier=summary["brier_score"],
+                    sample_count_dist=summary["sample_count_distribution"],
+                    tiers=summary["tiers"],
+                )
+            )
+        return 0
+
+    if args.command == "diagnose-feature-signal":
+        result = diagnose_feature_signal(
+            stock_code=args.stock_code,
+            horizon_days=args.horizon_days,
+            min_sample_count=args.min_sample_count,
+            feature_names=args.feature_names,
+        )
+        print(
+            f"diagnose-feature-signal stock_code={result.stock_code} "
+            f"horizon_days={result.horizon_days} strong_signal_count={result.strong_signal_count}"
+        )
+        if result.strong_features:
+            print(f"  strong_features={result.strong_features}")
+        print("  top_rows:")
+        for row in result.rows[:12]:
+            print(
+                f"    {row.feature:>12} r_outcome={row.r_outcome:+.4f} "
+                f"r_return={row.r_return:+.4f} p_outcome={row.p_outcome:.4f} n={row.n}"
+            )
+        return 0
+
+    if args.command == "calibrate-pattern-score":
+        result = calibrate_pattern_score(
+            stock_code=args.stock_code,
+            horizon_days=list(args.horizon_days),
+            method=args.method,
+            train_ratio=args.train_ratio,
+            min_sample_count=args.min_sample_count,
+        )
+        for report in result.reports:
+            print(
+                f"calibrate-pattern-score stock_code={report['stock_code']} "
+                f"horizon={report['horizon_days']}d method={report['method']} "
+                f"train_size={report['train_size']} val_size={report['val_size']} "
+                f"brier_before={report['brier_before']:.4f} brier_after={report['brier_after']:.4f}"
+            )
+            for bucket in report["bucket_metrics"]:
+                print(
+                    "  bucket={bucket} n={n} error_before={error_before:.4f} "
+                    "-> error_after={error_after:.4f}".format(
+                        bucket=bucket.bucket,
+                        n=bucket.n,
+                        error_before=bucket.error_before,
+                        error_after=bucket.error_after,
+                    )
+                )
+            print(f"  model_path={report['model_path']}")
+        return 0
+
+    if args.command == "verify-calibration":
+        report = verify_calibration(
+            stock_code=args.stock_code,
+            horizon_days=args.horizon_days,
+            method=args.method,
+            train_ratio=args.train_ratio,
+            min_sample_count=args.min_sample_count,
+        )
+        print(
+            f"verify-calibration stock_code={report['stock_code']} "
+            f"horizon={report['horizon_days']}d method={report['method']} "
+            f"val_size={report['val_size']} monotonic={report['is_monotonic']} "
+            f"brier_before={report['brier_before']:.4f} brier_after={report['brier_after']:.4f}"
+        )
+        for row in report["curve_rows"]:
+            print(
+                "  bucket={bucket} n={n} raw_mean={raw_mean:.4f} "
+                "cal_mean={cal_mean:.4f} actual_mean={actual_mean:.4f}".format(**row)
+            )
         return 0
 
     parser.error(f"Unsupported command: {args.command}")

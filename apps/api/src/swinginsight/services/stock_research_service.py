@@ -32,6 +32,7 @@ from swinginsight.services.turning_point_service import TurningPointService
 RESEARCH_LOOKBACK_DAYS = 730
 RESEARCH_REFRESH_BUFFER_DAYS = 45
 RESEARCH_NEWS_REFRESH_DAYS = 14
+REMOTE_REFRESH_STALE_DAYS = 2
 MARKET_TIMEZONE = ZoneInfo("Asia/Shanghai")
 MARKET_OPEN_TIME = time(9, 15)
 MARKET_CLOSE_TIME = time(15, 0)
@@ -79,7 +80,11 @@ def is_market_session_open(now: datetime | None = None) -> bool:
 def should_refresh_remote_research_data(latest_trade_date: date | None, now: datetime | None = None) -> bool:
     if latest_trade_date is None:
         return True
-    return is_market_session_open(now)
+    current = now or current_market_datetime()
+    current_date = current.astimezone(MARKET_TIMEZONE).date() if current.tzinfo is not None else current.date()
+    if (current_date - latest_trade_date).days >= REMOTE_REFRESH_STALE_DAYS:
+        return True
+    return is_market_session_open(current)
 
 
 class StockResearchService:

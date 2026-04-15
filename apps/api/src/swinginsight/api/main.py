@@ -11,11 +11,17 @@ from sqlalchemy.orm import Session
 from swinginsight.api.routes.news import get_segment_news_payload, get_turning_point_news_payload
 from swinginsight.api.routes.predictions import get_prediction_payload
 from swinginsight.api.routes.segments import get_segment_chart_payload, get_segment_detail_payload
-from swinginsight.api.routes.stocks import get_stock_research_payload
+from swinginsight.api.routes.stocks import (
+    get_pattern_group_stat_payload,
+    get_pattern_score_snapshot,
+    get_pattern_similar_cases_payload,
+    get_stock_research_payload,
+)
 from swinginsight.api.routes.turning_points import commit_turning_points
 from swinginsight.db.session import session_scope
 from swinginsight.services.feature_materialization_service import get_segment_library_rows
 from swinginsight.services.stock_research_service import StockResearchService
+from swinginsight.services.score_validation_service import ScoreValidationService
 from swinginsight.api.schemas.turning_points import StockResearchResponse, TurningPointCommitRequest
 
 
@@ -50,6 +56,42 @@ def create_app(session_factory: Callable[[], Session] | None = None) -> FastAPI:
         session: Session = Depends(get_session),
     ) -> dict[str, object]:
         return commit_turning_points(stock_code=stock_code, payload=payload, session=session)
+
+    @app.get("/stocks/{stock_code}/pattern-score")
+    def get_pattern_score(stock_code: str, session: Session = Depends(get_session)) -> dict[str, object]:
+        snapshot = get_pattern_score_snapshot(session=session, stock_code=stock_code)
+        if snapshot is None:
+            raise HTTPException(status_code=404, detail="pattern score not found")
+        payload = snapshot["payload"]
+        query_end_date = snapshot.get("query_end_date")
+        if isinstance(query_end_date, date):
+            ScoreValidationService(session).log_pattern_score(
+                stock_code=stock_code,
+                query_window_id=snapshot.get("query_window_id"),
+                query_end_date=query_end_date,
+                predicted_win_rate=float(payload.get("win_rate") or 0.0),
+                predicted_avg_return=float(payload.get("avg_return") or 0.0),
+                sample_count=int(payload.get("sample_count") or 0),
+            )
+        return payload
+
+    @app.get("/stocks/{stock_code}/similar-cases")
+    def get_pattern_similar_cases(stock_code: str, session: Session = Depends(get_session)) -> list[dict[str, object]]:
+        payload = get_pattern_similar_cases_payload(session=session, stock_code=stock_code)
+        if payload is None:
+            raise HTTPException(status_code=404, detail="similar cases not found")
+        return payload
+
+    @app.get("/stocks/{stock_code}/group-stat")
+    def get_pattern_group_stat(stock_code: str, session: Session = Depends(get_session)) -> dict[str, object]:
+        payload = get_pattern_group_stat_payload(session=session, stock_code=stock_code)
+        if payload is None:
+            raise HTTPException(status_code=404, detail="group stat not found")
+        return payload
+
+    @app.get("/stocks/{stock_code}/score-validation")
+    def get_score_validation(stock_code: str, session: Session = Depends(get_session)) -> dict[str, object]:
+        return ScoreValidationService(session).build_validation_report(stock_code=stock_code)
 
     @app.get("/segments/{segment_id}")
     def get_segment(segment_id: int, session: Session = Depends(get_session)) -> dict[str, object]:

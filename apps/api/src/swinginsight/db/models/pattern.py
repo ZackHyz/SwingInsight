@@ -53,6 +53,7 @@ class PatternFeature(CreatedAtMixin, Base):
     trend_context_json: Mapped[list[float] | None] = mapped_column(JSON)
     vola_context_json: Mapped[list[float] | None] = mapped_column(JSON)
     coarse_vector_json: Mapped[list[float] | None] = mapped_column(JSON)
+    context_feature_json: Mapped[dict[str, float] | None] = mapped_column(JSON)
     feature_version: Mapped[str | None] = mapped_column(String(64))
 
 

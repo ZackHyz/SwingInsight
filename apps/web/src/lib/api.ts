@@ -167,6 +167,42 @@ export type ApiClient = {
   getSegmentDetail: (segmentId: string) => Promise<SegmentDetailData>;
   getSegmentLibrary: () => Promise<SegmentLibraryData>;
   getPrediction: (stockCode: string, predictDate: string) => Promise<PredictionData>;
+  getPatternScore?: (stockCode: string) => Promise<PatternScoreData>;
+  getPatternSimilarCases?: (stockCode: string) => Promise<PatternSimilarCaseData[]>;
+  getPatternGroupStat?: (stockCode: string) => Promise<PatternGroupStatData>;
+};
+
+export type PatternScoreData = {
+  horizon_days: number;
+  raw_win_rate?: number;
+  win_rate_5d?: number;
+  win_rate_10d?: number;
+  win_rate: number;
+  avg_return: number;
+  sample_count: number;
+  confidence: "low" | "medium" | "high";
+  calibrated?: boolean;
+};
+
+export type PatternSimilarCaseData = {
+  window_id?: number | null;
+  window_start_date?: string | null;
+  window_end_date?: string | null;
+  segment_start_date?: string | null;
+  segment_end_date?: string | null;
+  similarity_score: number;
+  future_return_5d?: number | null;
+  future_return_10d?: number | null;
+  stock_code?: string | null;
+  segment_id?: number | null;
+};
+
+export type PatternGroupStatData = {
+  horizon_days: number[];
+  win_rates: number[];
+  avg_returns: number[];
+  sample_counts: number[];
+  return_distribution: number[];
 };
 
 export type SegmentDetailData = {
@@ -272,5 +308,26 @@ export const apiClient: ApiClient = {
       throw new Error(`Failed to load prediction: ${response.status}`);
     }
     return (await response.json()) as PredictionData;
+  },
+  async getPatternScore(stockCode) {
+    const response = await fetch(`${API_BASE}/stocks/${stockCode}/pattern-score`);
+    if (!response.ok) {
+      throw new Error(`Failed to load pattern score: ${response.status}`);
+    }
+    return (await response.json()) as PatternScoreData;
+  },
+  async getPatternSimilarCases(stockCode) {
+    const response = await fetch(`${API_BASE}/stocks/${stockCode}/similar-cases`);
+    if (!response.ok) {
+      throw new Error(`Failed to load similar cases: ${response.status}`);
+    }
+    return (await response.json()) as PatternSimilarCaseData[];
+  },
+  async getPatternGroupStat(stockCode) {
+    const response = await fetch(`${API_BASE}/stocks/${stockCode}/group-stat`);
+    if (!response.ok) {
+      throw new Error(`Failed to load group stat: ${response.status}`);
+    }
+    return (await response.json()) as PatternGroupStatData;
   },
 };

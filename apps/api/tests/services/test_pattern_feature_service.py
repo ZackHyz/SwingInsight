@@ -84,3 +84,42 @@ def test_pattern_feature_service_materializes_feature_rows() -> None:
     assert result.features == 1
     assert feature_row is not None
     assert feature_row.price_seq_json is not None
+
+
+def test_pattern_feature_service_materializes_context_feature_sets() -> None:
+    from swinginsight.db.models.pattern import PatternFeature, PatternWindow
+    from swinginsight.services.pattern_feature_service import PatternFeatureService
+
+    session = build_session()
+    seed_prices(session, stock_code="600157", start_date=date(2024, 1, 1), count=120)
+    session.add(
+        PatternWindow(
+            window_uid="pw-feature-600157-20240401-20240407",
+            stock_code="600157",
+            start_date=date(2024, 4, 1),
+            end_date=date(2024, 4, 7),
+            window_size=7,
+            start_close=12.0,
+            end_close=12.7,
+            period_pct_change=5.8,
+            highest_day_pos=6,
+            lowest_day_pos=0,
+            trend_label="uptrend",
+            feature_version="pattern:v1",
+        )
+    )
+    session.commit()
+
+    result = PatternFeatureService(session).materialize(
+        stock_code="600157",
+        feature_sets=["coarse", "volume_context", "price_position", "trend_context"],
+    )
+    feature_row = session.scalar(select(PatternFeature))
+
+    assert result.windows == 1
+    assert result.features == 1
+    assert feature_row is not None
+    assert feature_row.context_feature_json is not None
+    assert "vol_ratio_vs_ma20" in feature_row.context_feature_json
+    assert "price_percentile_60d" in feature_row.context_feature_json
+    assert "pre_trend_slope_norm" in feature_row.context_feature_json
