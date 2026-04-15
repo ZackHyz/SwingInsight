@@ -1,6 +1,7 @@
 import { SimilarCaseList } from "./similar-case-list";
 import { PatternScoreCard } from "./pattern-score-card";
-import type { ApiClient, QueryWindow, SegmentChartWindowData, StockResearchData } from "../lib/api";
+import { OutcomeDistribution } from "./outcome-distribution";
+import type { ApiClient, PatternSimilarCaseData, StockResearchData } from "../lib/api";
 import { getMarketValueClass } from "../lib/market-tone";
 import { usePatternInsight } from "../hooks/use-pattern-insight";
 
@@ -12,8 +13,6 @@ type PredictionPanelProps = {
   finalPoints: StockResearchData["final_turning_points"];
   currentState: StockResearchData["current_state"];
 };
-
-const CONTEXT_TRADING_DAYS = 10;
 
 const PROBABILITY_LABELS: Record<string, string> = {
   up_1d: "次日上涨",
@@ -49,71 +48,6 @@ const RISK_VALUE_LABELS: Record<string, string> = {
   weak: "弱",
 };
 
-function buildCurrentChartWindow({
-  stockCode,
-  prices,
-  autoPoints,
-  finalPoints,
-  queryWindow,
-}: Pick<PredictionPanelProps, "stockCode" | "prices" | "autoPoints" | "finalPoints"> & {
-  queryWindow?: QueryWindow | null;
-}): SegmentChartWindowData | null {
-  if (prices.length === 0) {
-    return null;
-  }
-
-  let windowStartIndex = Math.max(prices.length - (CONTEXT_TRADING_DAYS * 2 + 3), 0);
-  let windowEndIndex = prices.length;
-  let highlightStartDate = prices[Math.max(prices.length - 2, 0)].trade_date;
-  let highlightEndDate = prices[prices.length - 1].trade_date;
-
-  if (queryWindow !== undefined && queryWindow !== null) {
-    const startIndex = prices.findIndex((row) => row.trade_date === queryWindow.start_date);
-    const endIndex = prices.findIndex((row) => row.trade_date === queryWindow.end_date);
-    if (startIndex !== -1 && endIndex !== -1) {
-      const leftIndex = Math.min(startIndex, endIndex);
-      const rightIndex = Math.max(startIndex, endIndex);
-      windowStartIndex = Math.max(leftIndex - CONTEXT_TRADING_DAYS, 0);
-      windowEndIndex = Math.min(rightIndex + CONTEXT_TRADING_DAYS + 1, prices.length);
-      highlightStartDate = prices[leftIndex].trade_date;
-      highlightEndDate = prices[rightIndex].trade_date;
-    }
-  } else if (finalPoints.length >= 2) {
-    const startPoint = finalPoints[finalPoints.length - 2];
-    const endPoint = finalPoints[finalPoints.length - 1];
-    const startIndex = prices.findIndex((row) => row.trade_date === startPoint.point_date);
-    const endIndex = prices.findIndex((row) => row.trade_date === endPoint.point_date);
-    if (startIndex !== -1 && endIndex !== -1) {
-      const leftIndex = Math.min(startIndex, endIndex);
-      const rightIndex = Math.max(startIndex, endIndex);
-      windowStartIndex = Math.max(leftIndex - CONTEXT_TRADING_DAYS, 0);
-      windowEndIndex = Math.min(rightIndex + CONTEXT_TRADING_DAYS + 1, prices.length);
-      highlightStartDate = prices[leftIndex].trade_date;
-      highlightEndDate = prices[rightIndex].trade_date;
-    }
-  }
-
-  const windowPrices = prices.slice(windowStartIndex, windowEndIndex);
-  const windowStartDate = windowPrices[0]?.trade_date ?? highlightStartDate;
-  const windowEndDate = windowPrices[windowPrices.length - 1]?.trade_date ?? highlightEndDate;
-
-  return {
-    segment: {
-      id: 0,
-      stock_code: stockCode,
-      start_date: highlightStartDate,
-      end_date: highlightEndDate,
-    },
-    highlight_range: {
-      start_date: highlightStartDate,
-      end_date: highlightEndDate,
-    },
-    prices: windowPrices,
-    auto_turning_points: autoPoints.filter((point) => point.point_date >= windowStartDate && point.point_date <= windowEndDate),
-    final_turning_points: finalPoints.filter((point) => point.point_date >= windowStartDate && point.point_date <= windowEndDate),
-  };
-}
-
 function formatSignedPercent(value?: number) {
   if (value === undefined || value === null) {
     return "--";
@@ -143,15 +77,22 @@ export function PredictionPanel({ apiClient, stockCode, prices, autoPoints, fina
   const probabilities = currentState.probabilities ?? {};
   const keyFeatures = currentState.key_features ?? {};
   const riskFlags = currentState.risk_flags ?? {};
-  const similarCases = currentState.similar_cases ?? [];
+  const fallbackSimilarCases: PatternSimilarCaseData[] = (currentState.similar_cases ?? []).map((item) => ({
+    window_id: item.window_id,
+    window_start_date: item.window_start_date ?? item.start_date ?? null,
+    window_end_date: item.window_end_date ?? item.end_date ?? null,
+    segment_start_date: item.segment_start_date ?? item.start_date ?? null,
+    segment_end_date: item.segment_end_date ?? item.end_date ?? null,
+    similarity_score: item.score,
+        future_return_5d: item.return_5d,
+        future_return_10d: item.return_10d,
+        future_return_20d: item.return_20d,
+        stock_code: item.stock_code,
+        segment_id: item.segment_id,
+      }));
+  const similarCases = patternInsight.status === "ready" ? patternInsight.data.similarCases : fallbackSimilarCases;
+  const selectedCase = similarCases.find((item) => item.window_id === patternInsight.selectedCaseId) ?? null;
   const groupStat = currentState.group_stat;
-  const currentChartWindow = buildCurrentChartWindow({
-    stockCode,
-    prices,
-    autoPoints,
-    finalPoints,
-    queryWindow: currentState.query_window,
-  });
 
   return (
     <aside className="terminal-panel">
@@ -201,6 +142,15 @@ export function PredictionPanel({ apiClient, stockCode, prices, autoPoints, fina
           score={patternInsight.status === "ready" ? patternInsight.data.score : null}
           loading={patternInsight.status === "loading"}
         />
+        <OutcomeDistribution
+          groupStat={patternInsight.status === "ready" ? patternInsight.data.groupStat : null}
+          loading={patternInsight.status === "loading"}
+          selectedReturnsByHorizon={{
+            5: selectedCase?.future_return_5d ?? null,
+            10: selectedCase?.future_return_10d ?? null,
+            20: selectedCase?.future_return_20d ?? null,
+          }}
+        />
         {groupStat === undefined ? null : (
           <section className="terminal-stack">
             <h3>相似样本统计</h3>
@@ -217,8 +167,8 @@ export function PredictionPanel({ apiClient, stockCode, prices, autoPoints, fina
         )}
         <SimilarCaseList
           items={similarCases}
-          currentChartWindow={currentChartWindow}
-          loadSegmentChartWindow={(segmentId) => apiClient.getSegmentChartWindow(String(segmentId))}
+          selectedCaseId={patternInsight.selectedCaseId}
+          onSelectCase={patternInsight.setSelectedCaseId}
         />
       </div>
     </aside>

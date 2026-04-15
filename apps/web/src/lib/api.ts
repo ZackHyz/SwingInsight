@@ -33,6 +33,7 @@ export type SimilarCase = {
   return_3d?: number | null;
   return_5d?: number | null;
   return_10d?: number | null;
+  return_20d?: number | null;
   start_date?: string;
   end_date?: string;
   window_id?: number | null;
@@ -193,6 +194,7 @@ export type PatternSimilarCaseData = {
   similarity_score: number;
   future_return_5d?: number | null;
   future_return_10d?: number | null;
+  future_return_20d?: number | null;
   stock_code?: string | null;
   segment_id?: number | null;
 };
@@ -202,7 +204,8 @@ export type PatternGroupStatData = {
   win_rates: number[];
   avg_returns: number[];
   sample_counts: number[];
-  return_distribution: number[];
+  return_distribution?: number[];
+  return_distributions?: Record<string, number[]>;
 };
 
 export type SegmentDetailData = {

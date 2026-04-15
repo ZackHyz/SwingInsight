@@ -23,6 +23,7 @@ export function usePatternInsight(stockCode: string, apiClient: PatternInsightCl
     groupStat: null,
   });
   const [status, setStatus] = useState<PatternInsightStatus>("idle");
+  const [selectedCaseId, setSelectedCaseId] = useState<number | null>(null);
 
   useEffect(() => {
     if (!stockCode || apiClient.getPatternScore === undefined || apiClient.getPatternSimilarCases === undefined || apiClient.getPatternGroupStat === undefined) {
@@ -32,6 +33,7 @@ export function usePatternInsight(stockCode: string, apiClient: PatternInsightCl
         similarCases: [],
         groupStat: null,
       });
+      setSelectedCaseId(null);
       return;
     }
 
@@ -51,6 +53,12 @@ export function usePatternInsight(stockCode: string, apiClient: PatternInsightCl
           similarCases,
           groupStat,
         });
+        setSelectedCaseId((current) => {
+          if (current === null) {
+            return similarCases[0]?.window_id ?? null;
+          }
+          return similarCases.some((item) => item.window_id === current) ? current : (similarCases[0]?.window_id ?? null);
+        });
         setStatus("ready");
       })
       .catch(() => {
@@ -66,5 +74,7 @@ export function usePatternInsight(stockCode: string, apiClient: PatternInsightCl
   return {
     data,
     status,
+    selectedCaseId,
+    setSelectedCaseId,
   };
 }

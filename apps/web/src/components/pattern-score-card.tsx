@@ -6,6 +6,8 @@ type PatternScoreCardProps = {
   loading?: boolean;
 };
 
+const SHOW_RAW_SCORE = ((import.meta as { env?: { VITE_PATTERN_SCORE_DEBUG?: string } }).env?.VITE_PATTERN_SCORE_DEBUG ?? "0") === "1";
+
 function formatPercent(value?: number) {
   if (value === undefined || value === null) {
     return "--";
@@ -43,17 +45,21 @@ export function PatternScoreCard({ score, loading = false }: PatternScoreCardPro
       </section>
     );
   }
+  const isCalibrated = score.calibrated === true;
+  const resolved5dWinRate = isCalibrated ? (score.win_rate_5d ?? score.win_rate) : (score.raw_win_rate ?? score.win_rate);
+  const resolved10dWinRate = isCalibrated ? (score.win_rate_10d ?? score.win_rate) : (score.raw_win_rate ?? score.win_rate);
+
   return (
     <section className="terminal-stack">
       <h3>形态评分</h3>
       <ul className="terminal-list">
-        <li>5日胜率 {formatPercent(score.win_rate_5d ?? score.win_rate)}</li>
-        <li>10日胜率 {formatPercent(score.win_rate_10d ?? score.win_rate)}</li>
+        <li>5日胜率 {formatPercent(resolved5dWinRate)}{isCalibrated ? "" : " (未校准)"}</li>
+        <li>10日胜率 {formatPercent(resolved10dWinRate)}{isCalibrated ? "" : " (未校准)"}</li>
         <li>
           {score.horizon_days}日预期涨跌{" "}
           <span className={getMarketValueClass(score.avg_return)}>{formatSignedPercent(score.avg_return)}</span>
         </li>
-        {score.raw_win_rate !== undefined ? <li>原始胜率 {formatPercent(score.raw_win_rate)}</li> : null}
+        {SHOW_RAW_SCORE && score.raw_win_rate !== undefined ? <li>原始胜率 {formatPercent(score.raw_win_rate)}</li> : null}
         <li>样本数 n={score.sample_count}</li>
         <li>置信度 {CONFIDENCE_LABELS[score.confidence]}</li>
         <li>概率校准 {score.calibrated ? "已启用(Platt)" : "未启用"}</li>

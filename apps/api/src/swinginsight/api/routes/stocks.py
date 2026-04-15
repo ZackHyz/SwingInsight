@@ -264,6 +264,7 @@ def get_pattern_similar_cases_payload(session: Session, stock_code: str, *, top_
             "similarity_score": float(item.get("score") or 0.0),
             "future_return_5d": item.get("return_5d"),
             "future_return_10d": item.get("return_10d"),
+            "future_return_20d": item.get("return_20d"),
             "stock_code": item.get("stock_code"),
             "segment_id": item.get("segment_id"),
         }
@@ -277,12 +278,16 @@ def get_pattern_group_stat_payload(session: Session, stock_code: str) -> dict[st
         return None
     similar_cases = _resolve_similar_cases(summary)
     horizons = (5, 10, 20)
+    return_distributions = {
+        str(horizon): _return_distribution(similar_cases, horizon=horizon) for horizon in horizons
+    }
     return {
         "horizon_days": list(horizons),
         "win_rates": [_win_rate(similar_cases, horizon=horizon) for horizon in horizons],
         "avg_returns": [_weighted_return(similar_cases, horizon=horizon)["avg_return"] for horizon in horizons],
         "sample_counts": [_sample_count(similar_cases, horizon=horizon) for horizon in horizons],
-        "return_distribution": _return_distribution(similar_cases, horizon=10),
+        "return_distribution": return_distributions["10"],
+        "return_distributions": return_distributions,
     }
 
 

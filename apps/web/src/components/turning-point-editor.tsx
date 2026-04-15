@@ -53,6 +53,7 @@ export function TurningPointEditor({ stockCode, initialData, apiClient, onCommit
       }),
     [draftFinalPoints]
   );
+  const queryWindowHighlight = initialData.current_state.query_window;
 
   function handleSelectPrice(row: PriceRow) {
     if (pendingAction === null) {
@@ -191,6 +192,14 @@ export function TurningPointEditor({ stockCode, initialData, apiClient, onCommit
           autoPoints={initialData.auto_turning_points}
           finalPoints={sortedDraftPoints}
           onSelectPrice={handleSelectPrice}
+          highlightRange={
+            queryWindowHighlight === undefined || queryWindowHighlight === null
+              ? undefined
+              : {
+                  start_date: queryWindowHighlight.start_date,
+                  end_date: queryWindowHighlight.end_date,
+                }
+          }
           height={760}
         />
       </div>

@@ -95,6 +95,7 @@ def test_pattern_insight_endpoints_return_expected_payloads(monkeypatch) -> None
     assert cases_payload[0]["window_id"] == 101
     assert cases_payload[0]["similarity_score"] == 0.9
     assert cases_payload[0]["future_return_10d"] == 0.08
+    assert cases_payload[0]["future_return_20d"] == 0.11
 
     stat_response = client.get("/stocks/600157/group-stat")
     assert stat_response.status_code == 200
@@ -104,6 +105,11 @@ def test_pattern_insight_endpoints_return_expected_payloads(monkeypatch) -> None
     assert len(stat_payload["avg_returns"]) == 3
     assert stat_payload["sample_counts"] == [2, 2, 2]
     assert stat_payload["return_distribution"] == [-0.01, 0.08]
+    assert stat_payload["return_distributions"] == {
+        "5": [-0.03, 0.04],
+        "10": [-0.01, 0.08],
+        "20": [0.02, 0.11],
+    }
 
 
 def test_pattern_insight_endpoints_return_404_when_prediction_missing(monkeypatch) -> None:

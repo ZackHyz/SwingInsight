@@ -201,6 +201,73 @@ Pattern-driven prediction payloads now expose:
 - `group_stat`
 - per-sample `window_start_date` / `window_end_date`
 - per-sample `segment_start_date` / `segment_end_date`
+- per-sample `future_return_5d` / `future_return_10d` / `future_return_20d`
+
+Pattern insight endpoints:
+
+- `GET /stocks/{stock_code}/pattern-score`: calibrated win-rate payload (`raw_win_rate`, `win_rate_5d`, `win_rate_10d`, `calibrated`).
+- `GET /stocks/{stock_code}/similar-cases`: top-k similar windows with 5d/10d/20d forward returns.
+- `GET /stocks/{stock_code}/group-stat`: aggregate stats plus return distributions.
+  - `return_distribution`: backward-compatible 10d distribution.
+  - `return_distributions`: keyed distributions for `5` / `10` / `20` horizons.
+
+## Pattern Score Calibration
+
+Run walk-forward backtest first, then fit and verify calibration on backtest outputs.
+
+```bash
+cd apps/api
+../../.venv/bin/python -m swinginsight.jobs.cli backtest-pattern-score \
+  --stock-code 600157 \
+  --start 2022-06-01 \
+  --end 2025-12-31 \
+  --horizon-days 5 10 \
+  --min-similarity 0.80 \
+  --min-samples 5 \
+  --top-k 20
+
+../../.venv/bin/python -m swinginsight.jobs.cli calibrate-pattern-score \
+  --stock-code 600157 \
+  --horizon-days 5 10 \
+  --method platt
+
+../../.venv/bin/python -m swinginsight.jobs.cli verify-calibration \
+  --stock-code 600157 \
+  --horizon-days 10 \
+  --method platt
+```
+
+Calibration artifacts are persisted under `apps/api/data/calibration/*.pkl`.
+When a model does not exist, pattern-score inference transparently falls back to raw score.
+
+`/stocks/{stock_code}/pattern-score` now includes:
+
+- `raw_win_rate`
+- `win_rate_5d`
+- `win_rate_10d`
+- `calibrated`
+
+## Backtest And Diagnosis
+
+Feature signal diagnosis and quick sanity probe commands:
+
+```bash
+cd apps/api
+../../.venv/bin/python -m swinginsight.jobs.cli diagnose-feature-signal \
+  --stock-code 600157 \
+  --horizon-days 5
+
+../../.venv/bin/python scripts/sanity_check_calibration.py 600157
+```
+
+The diagnosis output helps identify useful features before running full backtests and calibration.
+
+Frontend pattern insight panel now includes:
+
+- `PatternScoreCard` (calibrated score with confidence and optional raw debug view)
+- `SimilarCasesTimeline` v1 static list
+- `OutcomeDistribution` with 5d/10d/20d horizon tabs and current prediction marker
+- Query-window overlay on Kline chart
 
 ## Failure Debugging
 

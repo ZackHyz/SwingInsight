@@ -135,4 +135,32 @@ describe("turning point editor", () => {
 
     expect(screen.queryByText("2024-01-02 peak 10.2")).toBeNull();
   });
+
+  it("overlays query window highlight on the main kline chart", () => {
+    const apiClient: ApiClient = {
+      getStockResearch: vi.fn(),
+      commitTurningPoints: vi.fn(),
+      getSegmentChartWindow: vi.fn(),
+      getSegmentDetail: vi.fn(),
+      getSegmentLibrary: vi.fn(),
+      getPrediction: vi.fn(),
+    };
+
+    const data = buildData();
+    data.current_state.query_window = {
+      start_date: "2024-01-03",
+      end_date: "2024-01-04",
+      window_size: 7,
+    };
+
+    render(
+      <StockResearchPage
+        stockCode="000001"
+        initialData={data}
+        apiClient={apiClient}
+      />
+    );
+
+    expect(screen.getByTestId("segment-highlight")).toBeTruthy();
+  });
 });
