@@ -17,9 +17,9 @@ from swinginsight.db.models.stock import StockBasic
 from swinginsight.db.models.turning_point import TurningPoint
 from swinginsight.ingest.daily_price_importer import DailyPriceImporter, ImportResult
 from swinginsight.jobs.import_market_data import build_daily_price_feed, ensure_stock_basic
+from swinginsight.jobs.align_news import AlignNewsResult, align_news
 from swinginsight.jobs.import_news import import_news, resolve_news_refresh_window
-from swinginsight.jobs.process_news import process_news
-from swinginsight.jobs.align_news import align_news
+from swinginsight.jobs.process_news import ProcessNewsResult, process_news
 from swinginsight.services.feature_materialization_service import materialize_segment_features
 from swinginsight.services.manual_turning_point_service import MANUAL_VERSION_CODE
 from swinginsight.services.pattern_feature_service import PatternFeatureService
@@ -47,6 +47,20 @@ class NewsRefreshResult:
     duplicates: int
     point_mappings: int
     segment_mappings: int
+
+
+@dataclass(slots=True, frozen=True)
+class RefreshPreparation:
+    latest_trade_date_before_refresh: date | None
+    should_refresh_remote: bool
+
+
+@dataclass(slots=True, frozen=True)
+class PriceRefreshResult:
+    source: str | None
+    inserted: int
+    updated: int
+    skipped: int
 
 
 def research_window_start(anchor_date: date | None = None) -> date:
@@ -92,8 +106,9 @@ class StockResearchService:
         self.session = session
 
     def ensure_stock_ready(self, stock_code: str) -> bool:
-        latest_trade_date_before_refresh = self._load_latest_trade_date(stock_code)
-        should_refresh_remote = should_refresh_remote_research_data(latest_trade_date_before_refresh) and not self._has_demo_seed_data(stock_code)
+        preparation = self.prepare_refresh(stock_code)
+        latest_trade_date_before_refresh = preparation.latest_trade_date_before_refresh
+        should_refresh_remote = preparation.should_refresh_remote
         if should_refresh_remote:
             try:
                 import_result = self._refresh_live_prices(stock_code, latest_trade_date=latest_trade_date_before_refresh)
@@ -103,11 +118,11 @@ class StockResearchService:
         else:
             import_result = ImportResult(skipped=1)
         self.session.commit()
-        latest_trade_date = self._load_latest_trade_date(stock_code)
+        latest_trade_date = self.load_latest_trade_date(stock_code)
         if latest_trade_date is None:
             return False
         self.session.commit()
-        needs_rebuild = self._needs_rebuild(stock_code=stock_code, latest_trade_date=latest_trade_date)
+        needs_rebuild = self.needs_rebuild(stock_code=stock_code, latest_trade_date=latest_trade_date)
         has_live_price_updates = self._has_live_price_updates(import_result)
 
         if should_refresh_remote:
@@ -124,10 +139,81 @@ class StockResearchService:
                 segment_mappings=0,
             )
 
+        prediction_required = self.materialize_refresh_artifacts(
+            stock_code=stock_code,
+            latest_trade_date=latest_trade_date,
+            needs_rebuild=needs_rebuild,
+            has_live_price_updates=has_live_price_updates,
+            news_refresh=news_refresh,
+        )
+        if prediction_required:
+            self.predict_for_refresh(stock_code=stock_code, latest_trade_date=latest_trade_date)
+
+        self.session.flush()
+        return self.stock_exists(stock_code)
+
+    def prepare_refresh(self, stock_code: str) -> RefreshPreparation:
+        latest_trade_date_before_refresh = self._load_latest_trade_date(stock_code)
+        should_refresh_remote = should_refresh_remote_research_data(latest_trade_date_before_refresh) and not self._has_demo_seed_data(
+            stock_code
+        )
+        return RefreshPreparation(
+            latest_trade_date_before_refresh=latest_trade_date_before_refresh,
+            should_refresh_remote=should_refresh_remote,
+        )
+
+    def refresh_live_prices(self, stock_code: str, latest_trade_date: date | None) -> PriceRefreshResult:
+        return self._run_live_price_refresh(stock_code, latest_trade_date=latest_trade_date)
+
+    def _run_live_price_refresh(self, stock_code: str, *, latest_trade_date: date | None) -> PriceRefreshResult:
+        feed, source_name = build_daily_price_feed(demo=False)
+        ensure_stock_basic(self.session, stock_code)
+        result = DailyPriceImporter(session=self.session, feed=feed, source_name=source_name).run(
+            stock_code=stock_code,
+            start=research_refresh_start(latest_trade_date),
+        )
+        return PriceRefreshResult(
+            source=source_name,
+            inserted=result.inserted,
+            updated=result.updated,
+            skipped=result.skipped,
+        )
+
+    def load_latest_trade_date(self, stock_code: str):
+        return self._load_latest_trade_date(stock_code)
+
+    def needs_rebuild(self, *, stock_code: str, latest_trade_date) -> bool:
+        return self._needs_rebuild(stock_code=stock_code, latest_trade_date=latest_trade_date)
+
+    def resolve_news_window(self, *, anchor_date: date) -> tuple[date, date]:
+        return resolve_news_refresh_window(
+            start=anchor_date - timedelta(days=RESEARCH_NEWS_REFRESH_DAYS),
+            end=anchor_date,
+        )
+
+    def import_news_window(self, stock_code: str, *, start_date: date, end_date: date) -> int:
+        return import_news(stock_code=stock_code, start=start_date, end=end_date, session=self.session)
+
+    def process_news_window(self, stock_code: str, *, start_date: date, end_date: date) -> ProcessNewsResult:
+        return process_news(stock_code=stock_code, start=start_date, end=end_date, session=self.session)
+
+    def align_news_window(self, stock_code: str, *, start_date: date, end_date: date) -> AlignNewsResult:
+        return align_news(stock_code=stock_code, start=start_date, end=end_date, session=self.session)
+
+    def materialize_refresh_artifacts(
+        self,
+        *,
+        stock_code: str,
+        latest_trade_date: date,
+        needs_rebuild: bool,
+        has_live_price_updates: bool,
+        news_refresh: NewsRefreshResult,
+    ) -> int:
+        materialized_segments = 0
         if needs_rebuild or has_live_price_updates:
-            self._rebuild_research_artifacts(stock_code=stock_code, latest_trade_date=latest_trade_date)
+            materialized_segments = self._rebuild_research_artifacts(stock_code=stock_code, latest_trade_date=latest_trade_date)
         elif self._has_news_updates(news_refresh):
-            self._refresh_news_features(
+            materialized_segments = self._refresh_news_features(
                 stock_code=stock_code,
                 latest_trade_date=latest_trade_date,
                 window_start=news_refresh.start_date,
@@ -137,16 +223,20 @@ class StockResearchService:
             stock_code=stock_code,
             force_refresh=needs_rebuild or has_live_price_updates,
         )
+        return materialized_segments
 
-        self.session.flush()
+    def predict_for_refresh(self, *, stock_code: str, latest_trade_date: date):
+        return PredictionService(self.session).predict(stock_code, latest_trade_date)
+
+    def stock_exists(self, stock_code: str) -> bool:
         return self._stock_exists(stock_code)
 
     def _refresh_live_prices(self, stock_code: str, *, latest_trade_date: date | None) -> ImportResult:
-        feed, source_name = build_daily_price_feed(demo=False)
-        ensure_stock_basic(self.session, stock_code)
-        return DailyPriceImporter(session=self.session, feed=feed, source_name=source_name).run(
-            stock_code=stock_code,
-            start=research_refresh_start(latest_trade_date),
+        result = self._run_live_price_refresh(stock_code, latest_trade_date=latest_trade_date)
+        return ImportResult(
+            inserted=result.inserted,
+            updated=result.updated,
+            skipped=result.skipped,
         )
 
     def _needs_rebuild(self, *, stock_code: str, latest_trade_date) -> bool:
@@ -171,15 +261,12 @@ class StockResearchService:
         return import_result.inserted > 0 or import_result.updated > 0
 
     def _refresh_news_window(self, *, stock_code: str, anchor_date: date) -> NewsRefreshResult:
-        window_start, window_end = resolve_news_refresh_window(
-            start=anchor_date - timedelta(days=RESEARCH_NEWS_REFRESH_DAYS),
-            end=anchor_date,
-        )
+        window_start, window_end = self.resolve_news_window(anchor_date=anchor_date)
         for attempt in range(2):
             try:
-                inserted = import_news(stock_code=stock_code, start=window_start, end=window_end, session=self.session)
-                processing = process_news(stock_code=stock_code, start=window_start, end=window_end, session=self.session)
-                alignment = align_news(stock_code=stock_code, start=window_start, end=window_end, session=self.session)
+                inserted = self.import_news_window(stock_code, start_date=window_start, end_date=window_end)
+                processing = self.process_news_window(stock_code, start_date=window_start, end_date=window_end)
+                alignment = self.align_news_window(stock_code, start_date=window_start, end_date=window_end)
                 return NewsRefreshResult(
                     start_date=window_start,
                     end_date=window_end,
@@ -199,7 +286,7 @@ class StockResearchService:
     def _has_news_updates(self, result: NewsRefreshResult) -> bool:
         return result.inserted > 0 or result.processed_count > 0 or result.point_mappings > 0 or result.segment_mappings > 0
 
-    def _refresh_news_features(self, *, stock_code: str, latest_trade_date: date, window_start: date) -> None:
+    def _refresh_news_features(self, *, stock_code: str, latest_trade_date: date, window_start: date) -> int:
         overlap_start = window_start - timedelta(days=5)
         segments = self.session.scalars(
             select(SwingSegment)
@@ -214,11 +301,9 @@ class StockResearchService:
         for segment in segments:
             materialize_segment_features(self.session, segment.id)
 
-        if segments:
-            self._ensure_pattern_similarity_artifacts(stock_code=stock_code, force_refresh=False)
-            PredictionService(self.session).predict(stock_code, latest_trade_date)
+        return len(segments)
 
-    def _rebuild_research_artifacts(self, *, stock_code: str, latest_trade_date) -> None:
+    def _rebuild_research_artifacts(self, *, stock_code: str, latest_trade_date) -> int:
         turning_point_result = TurningPointService(self.session).rebuild_points(
             stock_code=stock_code,
             algo="zigzag",
@@ -239,9 +324,7 @@ class StockResearchService:
         for segment in rebuilt_segments:
             materialize_segment_features(self.session, segment.id)
 
-        if rebuilt_segments:
-            self._ensure_pattern_similarity_artifacts(stock_code=stock_code, force_refresh=True)
-            PredictionService(self.session).predict(stock_code, latest_trade_date)
+        return len(rebuilt_segments)
 
     def _resolve_segment_version_code(self, *, stock_code: str, fallback_version: str) -> str:
         has_manual_points = self.session.scalar(
