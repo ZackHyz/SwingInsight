@@ -18,9 +18,11 @@ depends_on = None
 
 
 def upgrade() -> None:
+    sqlite_safe_bigint = sa.BigInteger().with_variant(sa.Integer(), "sqlite")
+
     op.create_table(
         "stock_refresh_task",
-        sa.Column("id", sa.BigInteger(), primary_key=True, autoincrement=True),
+        sa.Column("id", sqlite_safe_bigint, primary_key=True, autoincrement=True),
         sa.Column("stock_code", sa.String(length=16), nullable=False),
         sa.Column("status", sa.String(length=16), nullable=False),
         sa.Column("start_time", sa.DateTime(), nullable=True),
@@ -44,8 +46,8 @@ def upgrade() -> None:
 
     op.create_table(
         "stock_refresh_stage_log",
-        sa.Column("id", sa.BigInteger(), primary_key=True, autoincrement=True),
-        sa.Column("task_id", sa.BigInteger(), sa.ForeignKey("stock_refresh_task.id"), nullable=False),
+        sa.Column("id", sqlite_safe_bigint, primary_key=True, autoincrement=True),
+        sa.Column("task_id", sqlite_safe_bigint, sa.ForeignKey("stock_refresh_task.id"), nullable=False),
         sa.Column("stage_name", sa.String(length=64), nullable=False),
         sa.Column("status", sa.String(length=16), nullable=False),
         sa.Column("source", sa.String(length=32), nullable=True),

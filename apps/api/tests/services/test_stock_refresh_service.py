@@ -26,15 +26,20 @@ def build_session():
     return sessionmaker(bind=engine, future=True, expire_on_commit=False)()
 
 
-def test_enqueue_refresh_reuses_running_task() -> None:
+def test_enqueue_refresh_reuses_running_task(monkeypatch) -> None:
     from swinginsight.db.models.refresh import StockRefreshTask
+    from swinginsight.services import stock_refresh_service as stock_refresh_module
     from swinginsight.services.stock_refresh_service import StockRefreshService
 
     session = build_session()
     service = StockRefreshService(session)
+    now = datetime(2026, 4, 16, 10, 0, 0)
+    monkeypatch.setattr(stock_refresh_module, "_utcnow", lambda: now)
 
     first = service.enqueue("600010")
     first.status = "running"
+    first.start_time = datetime(2026, 4, 16, 9, 45, 1)
+    first.end_time = None
     session.flush()
 
     second = service.enqueue("600010")
@@ -42,6 +47,39 @@ def test_enqueue_refresh_reuses_running_task() -> None:
     tasks = session.scalars(select(StockRefreshTask).where(StockRefreshTask.stock_code == "600010")).all()
     assert first.id == second.id
     assert len(tasks) == 1
+    assert second.status == "running"
+
+
+def test_enqueue_refresh_replaces_stale_running_task(monkeypatch) -> None:
+    from swinginsight.db.models.refresh import StockRefreshTask
+    from swinginsight.services import stock_refresh_service as stock_refresh_module
+    from swinginsight.services.stock_refresh_service import StockRefreshService
+
+    session = build_session()
+    service = StockRefreshService(session)
+    now = datetime(2026, 4, 16, 10, 0, 0)
+    monkeypatch.setattr(stock_refresh_module, "_utcnow", lambda: now)
+
+    stale = service.enqueue("600010")
+    stale.status = "running"
+    stale.start_time = datetime(2026, 4, 16, 9, 20, 0)
+    stale.end_time = None
+    session.commit()
+
+    replacement = service.enqueue("600010")
+    tasks = session.scalars(
+        select(StockRefreshTask)
+        .where(StockRefreshTask.stock_code == "600010")
+        .order_by(StockRefreshTask.id.asc())
+    ).all()
+
+    session.refresh(stale)
+    assert replacement.id != stale.id
+    assert replacement.status == "queued"
+    assert stale.status == "failed"
+    assert stale.error_message == "stale_running_timeout"
+    assert stale.end_time == now
+    assert [task.status for task in tasks] == ["failed", "queued"]
 
 
 def test_enqueue_refresh_reuses_queued_task() -> None:

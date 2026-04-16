@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from typing import Any, Callable
 
 from sqlalchemy import delete, select
@@ -12,6 +12,8 @@ from swinginsight.db.models.refresh import StockRefreshStageLog, StockRefreshTas
 from swinginsight.jobs.align_news import AlignNewsResult
 from swinginsight.jobs.process_news import ProcessNewsResult
 from swinginsight.services.stock_research_service import NewsRefreshResult, PriceRefreshResult, StockResearchService
+
+RUNNING_TASK_STALE_TIMEOUT = timedelta(minutes=30)
 
 
 @dataclass(slots=True)
@@ -27,25 +29,27 @@ class StockRefreshService:
         self.session = session
 
     def enqueue(self, stock_code: str) -> StockRefreshTask:
-        existing = self._latest_inflight_task(stock_code)
-        if existing is not None:
-            return existing
-
-        task = StockRefreshTask(
-            stock_code=stock_code,
-            status="queued",
-        )
-        self.session.add(task)
-        try:
-            self.session.commit()
-        except IntegrityError:
-            self.session.rollback()
+        for _ in range(3):
             existing = self._latest_inflight_task(stock_code)
             if existing is not None:
+                if self._expire_stale_running_task(existing):
+                    continue
                 return existing
-            raise
-        self.session.refresh(task)
-        return task
+
+            task = StockRefreshTask(
+                stock_code=stock_code,
+                status="queued",
+            )
+            self.session.add(task)
+            try:
+                self.session.commit()
+            except IntegrityError:
+                self.session.rollback()
+                continue
+            self.session.refresh(task)
+            return task
+
+        raise RuntimeError(f"unable to enqueue refresh task for {stock_code}")
 
     def run(self, task_id: int) -> StockRefreshTask:
         task = self.session.get(StockRefreshTask, task_id)
@@ -240,6 +244,22 @@ class StockRefreshService:
             .order_by(StockRefreshTask.created_at.desc(), StockRefreshTask.id.desc())
             .limit(1)
         )
+
+    def _expire_stale_running_task(self, task: StockRefreshTask) -> bool:
+        if not self._is_stale_running_task(task):
+            return False
+
+        task.status = "failed"
+        task.end_time = _utcnow()
+        task.error_message = "stale_running_timeout"
+        self.session.commit()
+        self.session.refresh(task)
+        return True
+
+    def _is_stale_running_task(self, task: StockRefreshTask) -> bool:
+        if task.status != "running" or task.end_time is not None or task.start_time is None:
+            return False
+        return (_utcnow() - task.start_time) >= RUNNING_TASK_STALE_TIMEOUT
 
     def _execute_stage(
         self,
