@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from swinginsight.api.routes.news import get_segment_news_payload, get_turning_point_news_payload
 from swinginsight.api.routes.predictions import get_prediction_payload
+from swinginsight.api.routes.refresh import enqueue_stock_refresh, get_stock_refresh_status
 from swinginsight.api.routes.segments import get_segment_chart_payload, get_segment_detail_payload
 from swinginsight.api.routes.stocks import (
     get_pattern_group_stat_payload,
@@ -20,7 +21,6 @@ from swinginsight.api.routes.stocks import (
 from swinginsight.api.routes.turning_points import commit_turning_points
 from swinginsight.db.session import session_scope
 from swinginsight.services.feature_materialization_service import get_segment_library_rows
-from swinginsight.services.stock_research_service import StockResearchService
 from swinginsight.services.score_validation_service import ScoreValidationService
 from swinginsight.api.schemas.turning_points import StockResearchResponse, TurningPointCommitRequest
 
@@ -42,11 +42,20 @@ def create_app(session_factory: Callable[[], Session] | None = None) -> FastAPI:
 
     @app.get("/stocks/{stock_code}", response_model=StockResearchResponse)
     def get_stock(stock_code: str, session: Session = Depends(get_session)) -> dict[str, object]:
-        if not StockResearchService(session).ensure_stock_ready(stock_code):
-            raise HTTPException(status_code=404, detail="stock not found")
         payload = get_stock_research_payload(session=session, stock_code=stock_code)
         if payload is None:
             raise HTTPException(status_code=404, detail="stock not found")
+        return payload
+
+    @app.post("/stocks/{stock_code}/refresh")
+    def post_stock_refresh(stock_code: str, session: Session = Depends(get_session)) -> dict[str, object]:
+        return enqueue_stock_refresh(session=session, stock_code=stock_code)
+
+    @app.get("/stocks/{stock_code}/refresh-status")
+    def get_refresh_status(stock_code: str, session: Session = Depends(get_session)) -> dict[str, object]:
+        payload = get_stock_refresh_status(session=session, stock_code=stock_code)
+        if payload is None:
+            raise HTTPException(status_code=404, detail="refresh task not found")
         return payload
 
     @app.post("/stocks/{stock_code}/turning-points/commit")
