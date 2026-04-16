@@ -7,7 +7,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from swinginsight.db.models.news import NewsEventResult, NewsRaw, NewsSentimentResult
-from swinginsight.domain.news.events import extract_events
+from swinginsight.domain.news.events import EventSignal, extract_events
 from swinginsight.domain.news.sentiment import NewsSentimentScore, score_news_sentiment
 
 SENTIMENT_LABEL_SCORES = {
@@ -24,6 +24,7 @@ HEAT_LEVEL_SCORES = {
 
 POSITION_BULLISH_EVENTS = {"earnings", "policy_catalyst", "order_contract"}
 POSITION_RISK_EVENTS = {"risk_alert", "capital_action"}
+SOURCE_PRIORITY = {"rumor": 1, "media": 2, "announcement": 3}
 
 
 @dataclass(slots=True, frozen=True)
@@ -84,12 +85,57 @@ def adjust_sentiment_with_position(
     return round(max(min(adjusted, 1.0), -1.0), 4)
 
 
+def merge_event_signals(events: list[EventSignal]) -> list[EventSignal]:
+    grouped: dict[str, list[EventSignal]] = {}
+    for event in events:
+        grouped.setdefault(event.event_type, []).append(event)
+
+    merged: list[EventSignal] = []
+    for group_events in grouped.values():
+        if len(group_events) == 1:
+            merged.append(group_events[0])
+            continue
+
+        sorted_events = sorted(
+            group_events,
+            key=lambda event: (
+                SOURCE_PRIORITY.get(event.signal_source, 0),
+                event.confidence,
+                event.event_strength,
+            ),
+            reverse=True,
+        )
+        top = sorted_events[0]
+        second = sorted_events[1]
+        has_polarity_conflict = len({event.event_polarity for event in sorted_events if event.event_polarity != "neutral"}) > 1
+        close_confidence = abs(top.confidence - second.confidence) <= 0.03
+        same_priority = SOURCE_PRIORITY.get(top.signal_source, 0) == SOURCE_PRIORITY.get(second.signal_source, 0)
+
+        if has_polarity_conflict and close_confidence and same_priority:
+            merged.append(
+                EventSignal(
+                    sentence_index=top.sentence_index,
+                    sentence_text=top.sentence_text,
+                    event_type=top.event_type,
+                    event_polarity="neutral",
+                    event_strength=top.event_strength,
+                    trigger_keywords=sorted(set(top.trigger_keywords + second.trigger_keywords)),
+                    signal_source=top.signal_source,
+                    confidence=round(max(top.confidence, second.confidence), 4),
+                )
+            )
+            continue
+
+        merged.append(top)
+    return merged
+
+
 class NewsSentimentService:
     def __init__(self, session: Session) -> None:
         self.session = session
 
     def persist_for_news(self, row: NewsRaw, *, duplicate_count: int) -> NewsSentimentPersistenceResult:
-        events = extract_events(row.title, row.summary)
+        events = merge_event_signals(extract_events(row.title, row.summary, source_type=row.source_type))
         sentiment_score = score_news_sentiment(
             title=row.title,
             summary=row.summary,

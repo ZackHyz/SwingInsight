@@ -96,9 +96,9 @@ class NewsProcessingService:
             conflict_news=conflict_news,
         )
 
-    def _group_rows(self, rows: list[NewsRaw]) -> dict[tuple[str, str | None, object], list[NewsRaw]]:
-        grouped: dict[tuple[str, str | None, object], list[NewsRaw]] = {}
+    def _group_rows(self, rows: list[NewsRaw]) -> dict[tuple[str | None, str, object], list[NewsRaw]]:
+        grouped: dict[tuple[str | None, str, object], list[NewsRaw]] = {}
         for row in rows:
-            key = (normalize_title(row.title), row.source_name, row.news_date)
+            key = (row.stock_code, normalize_title(row.title), row.news_date)
             grouped.setdefault(key, []).append(row)
         return grouped

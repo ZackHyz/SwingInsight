@@ -80,3 +80,71 @@ def test_process_news_updates_existing_sentiment_rows_instead_of_duplicating() -
 
     assert session.scalar(select(func.count()).select_from(NewsSentimentResult).where(NewsSentimentResult.news_id == 1)) == 1
     assert session.scalar(select(func.count()).select_from(NewsEventResult).where(NewsEventResult.news_id == 1)) == 2
+
+
+def test_merge_events_prefers_higher_priority_source() -> None:
+    from swinginsight.domain.news.events import EventSignal
+    from swinginsight.services.news_sentiment_service import merge_event_signals
+
+    merged = merge_event_signals(
+        [
+            EventSignal(
+                sentence_index=0,
+                sentence_text="媒体称公司将减持",
+                event_type="capital_action",
+                event_polarity="negative",
+                event_strength=3,
+                trigger_keywords=["减持"],
+                signal_source="media",
+                confidence=0.78,
+            ),
+            EventSignal(
+                sentence_index=0,
+                sentence_text="公司公告回购计划",
+                event_type="capital_action",
+                event_polarity="positive",
+                event_strength=3,
+                trigger_keywords=["回购"],
+                signal_source="announcement",
+                confidence=0.76,
+            ),
+        ]
+    )
+
+    assert len(merged) == 1
+    assert merged[0].event_type == "capital_action"
+    assert merged[0].event_polarity == "positive"
+    assert merged[0].signal_source == "announcement"
+
+
+def test_merge_events_degrades_to_neutral_when_confidence_close() -> None:
+    from swinginsight.domain.news.events import EventSignal
+    from swinginsight.services.news_sentiment_service import merge_event_signals
+
+    merged = merge_event_signals(
+        [
+            EventSignal(
+                sentence_index=0,
+                sentence_text="公司公告预增",
+                event_type="earnings",
+                event_polarity="positive",
+                event_strength=4,
+                trigger_keywords=["预增"],
+                signal_source="announcement",
+                confidence=0.78,
+            ),
+            EventSignal(
+                sentence_index=0,
+                sentence_text="公司公告预亏",
+                event_type="earnings",
+                event_polarity="negative",
+                event_strength=4,
+                trigger_keywords=["预亏"],
+                signal_source="announcement",
+                confidence=0.76,
+            ),
+        ]
+    )
+
+    assert len(merged) == 1
+    assert merged[0].event_polarity == "neutral"

@@ -104,3 +104,52 @@ def test_rule_classifier_maps_business_categories() -> None:
     assert disclosure.sub_category == "governance"
     assert resolution.sub_category == "governance"
     assert material.sub_category == "governance"
+
+
+def test_process_news_collapses_same_day_cross_source_duplicates() -> None:
+    from swinginsight.db.models.news import NewsRaw
+    from swinginsight.services.news_processing_service import NewsProcessingService
+
+    session = build_session()
+    session.add_all(
+        [
+            NewsRaw(
+                news_uid="cross-source-1",
+                stock_code="000001",
+                title="公司签署重大订单协议",
+                summary="公告渠道披露",
+                content=None,
+                publish_time=datetime(2024, 1, 3, 9, 0, tzinfo=UTC).replace(tzinfo=None),
+                news_date=date(2024, 1, 3),
+                source_name="cninfo",
+                source_type="announcement",
+                url="https://example.com/cross-source-1",
+                data_source="fake",
+                fetch_time=datetime(2024, 1, 3, 9, 5, tzinfo=UTC).replace(tzinfo=None),
+                is_parsed=False,
+                parse_status="pending",
+            ),
+            NewsRaw(
+                news_uid="cross-source-2",
+                stock_code="000001",
+                title="公司签署重大订单协议",
+                summary="媒体渠道转载",
+                content=None,
+                publish_time=datetime(2024, 1, 3, 9, 20, tzinfo=UTC).replace(tzinfo=None),
+                news_date=date(2024, 1, 3),
+                source_name="eastmoney",
+                source_type="news",
+                url="https://example.com/cross-source-2",
+                data_source="fake",
+                fetch_time=datetime(2024, 1, 3, 9, 25, tzinfo=UTC).replace(tzinfo=None),
+                is_parsed=False,
+                parse_status="pending",
+            ),
+        ]
+    )
+    session.commit()
+
+    result = NewsProcessingService(session).process_batch([1, 2])
+
+    assert result.processed_count == 2
+    assert result.duplicates == 1
