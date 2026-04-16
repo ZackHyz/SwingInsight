@@ -44,6 +44,10 @@ def get_prediction_payload(session: Session, stock_code: str, predict_date: date
         "predict_date": predict_date.isoformat(),
         "current_state": result.current_state,
         "summary": result.summary,
+        "fallback_used": result.fallback_used,
+        "fallback_reason": result.fallback_reason,
+        "fallback_error_type": result.fallback_error_type,
+        "fallback_stage": result.fallback_stage,
         "probabilities": {
             "up_1d": result.up_prob_1d,
             "flat_1d": result.flat_prob_1d,

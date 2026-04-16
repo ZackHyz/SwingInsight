@@ -99,6 +99,10 @@ class PredictionOutcome:
     key_features: dict[str, float]
     risk_flags: dict[str, str]
     summary: str
+    fallback_used: bool
+    fallback_reason: str | None
+    fallback_error_type: str | None
+    fallback_stage: str | None
 
 
 class SimilarityStore:
@@ -365,21 +369,39 @@ class PredictionService:
 
         current_vector = self.similarity_store.load_feature_vector(current_segment.id)
         current_state = classify_current_state(current_vector)
+        pattern_result = None
+        fallback_used = False
+        fallback_reason: str | None = None
+        fallback_error_type: str | None = None
+        fallback_stage: str | None = None
         try:
             from swinginsight.services.pattern_similarity_service import PatternSimilarityService
-
-            with self.session.begin_nested():
-                pattern_result = PatternSimilarityService(self.session).find_similar_windows(
-                    current_segment=current_segment,
-                    top_k=5,
-                )
-        except Exception:
-            pattern_result = None
+        except Exception as exc:
+            fallback_used = True
+            fallback_reason = "pattern_similarity_error"
+            fallback_error_type = type(exc).__name__
+            fallback_stage = "pattern_similarity_import"
+        else:
+            try:
+                with self.session.begin_nested():
+                    pattern_result = PatternSimilarityService(self.session).find_similar_windows(
+                        current_segment=current_segment,
+                        top_k=5,
+                    )
+            except Exception as exc:
+                fallback_used = True
+                fallback_reason = "pattern_similarity_error"
+                fallback_error_type = type(exc).__name__
+                fallback_stage = "pattern_similarity_query"
         if pattern_result is not None and pattern_result.similar_cases:
             similar_cases = pattern_result.similar_cases
             group_stat = pattern_result.group_stat
             query_window = pattern_result.query_window
         else:
+            if not fallback_used:
+                fallback_used = True
+                fallback_reason = self._expected_pattern_fallback_reason(pattern_result)
+                fallback_stage = "pattern_similarity_query"
             similar_cases = self.similarity_store.find_top_k(current_segment=current_segment, current_vector=current_vector, k=5)
             group_stat = self._summarize_future_returns(similar_cases)
             query_window = None
@@ -426,7 +448,16 @@ class PredictionService:
             key_features=key_features,
             risk_flags=risk_flags,
             summary=summary,
+            fallback_used=fallback_used,
+            fallback_reason=fallback_reason,
+            fallback_error_type=fallback_error_type,
+            fallback_stage=fallback_stage,
         )
+
+    def _expected_pattern_fallback_reason(self, pattern_result: object | None) -> str:
+        if pattern_result is None or getattr(pattern_result, "query_window", None) is None:
+            return "no_pattern_window"
+        return "no_similar_pattern_cases"
 
     def _summarize_future_returns(self, similar_cases: list[SimilarCase]) -> dict[str, float]:
         def _mean(values: list[float | None]) -> float:

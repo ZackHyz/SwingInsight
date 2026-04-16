@@ -294,6 +294,21 @@ def test_prediction_service_returns_state_probabilities() -> None:
     assert len(result.similar_cases) >= 1
 
 
+def test_prediction_service_reports_expected_fallback_when_pattern_windows_are_missing() -> None:
+    from swinginsight.services.prediction_service import PredictionService
+
+    session = build_session()
+    seed_prediction_context(session)
+
+    result = PredictionService(session).predict("000001", date(2024, 6, 28))
+
+    assert result.similar_cases
+    assert result.fallback_used is True
+    assert result.fallback_reason == "no_pattern_window"
+    assert result.fallback_error_type is None
+    assert result.fallback_stage == "pattern_similarity_query"
+
+
 def test_similarity_search_returns_ranked_segments() -> None:
     from swinginsight.services.prediction_service import SimilarityStore
 
@@ -542,6 +557,10 @@ def test_prediction_payload_includes_sample_forward_return_fields() -> None:
     payload = get_prediction_payload(session, "000001", date(2024, 6, 28))
 
     assert payload["similar_cases"]
+    assert payload["fallback_used"] is True
+    assert payload["fallback_reason"] == "no_pattern_window"
+    assert payload["fallback_error_type"] is None
+    assert payload["fallback_stage"] == "pattern_similarity_query"
     sample = next(item for item in payload["similar_cases"] if item["stock_code"] == "600157")
     assert sample["stock_code"] == "600157"
     assert sample["return_1d"] is not None
@@ -566,6 +585,10 @@ def test_prediction_service_uses_pattern_similarity_when_pattern_windows_exist()
     result = PredictionService(session).predict("000001", date(2024, 6, 28))
 
     assert result.similar_cases
+    assert result.fallback_used is False
+    assert result.fallback_reason is None
+    assert result.fallback_error_type is None
+    assert result.fallback_stage is None
     assert result.group_stat["sample_count"] >= 1
     assert result.query_window is not None
     assert result.query_window["start_date"] is not None
@@ -598,6 +621,10 @@ def test_prediction_service_falls_back_after_pattern_query_error(monkeypatch) ->
     result = PredictionService(session).predict("000001", date(2024, 6, 28))
 
     assert result.similar_cases
+    assert result.fallback_used is True
+    assert result.fallback_reason == "pattern_similarity_error"
+    assert result.fallback_error_type == "OperationalError"
+    assert result.fallback_stage == "pattern_similarity_query"
     assert result.similar_cases[0].window_id is None
     assert result.group_stat["sample_count"] >= 1
 
