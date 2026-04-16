@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from swinginsight.db.base import BIGINT_TYPE, Base, CreatedAtMixin
@@ -12,6 +12,13 @@ class StockRefreshTask(CreatedAtMixin, Base):
     __tablename__ = "stock_refresh_task"
     __table_args__ = (
         Index("ix_stock_refresh_task_stock_code_status_start_time", "stock_code", "status", "start_time"),
+        Index(
+            "uq_stock_refresh_task_inflight_stock_code",
+            "stock_code",
+            unique=True,
+            sqlite_where=text("status IN ('queued', 'running')"),
+            postgresql_where=text("status IN ('queued', 'running')"),
+        ),
     )
 
     id: Mapped[int] = mapped_column(BIGINT_TYPE, primary_key=True, autoincrement=True)

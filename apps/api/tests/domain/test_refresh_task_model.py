@@ -5,7 +5,9 @@ from pathlib import Path
 import sys
 
 from sqlalchemy import create_engine, inspect
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import sessionmaker
+import pytest
 
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
@@ -47,3 +49,30 @@ def test_refresh_task_tables_exist_and_insert_work() -> None:
 
         assert task.id is not None
         assert stage_log.id is not None
+
+
+def test_refresh_task_rejects_second_inflight_task_for_same_stock() -> None:
+    from swinginsight.db.base import Base
+    from swinginsight.db.models.refresh import StockRefreshTask
+
+    engine = create_engine("sqlite+pysqlite:///:memory:", future=True)
+    Base.metadata.create_all(engine)
+
+    Session = sessionmaker(bind=engine, future=True, expire_on_commit=False)
+    with Session() as session:
+        session.add(
+            StockRefreshTask(
+                stock_code="600010",
+                status="queued",
+            )
+        )
+        session.commit()
+
+        session.add(
+            StockRefreshTask(
+                stock_code="600010",
+                status="running",
+            )
+        )
+        with pytest.raises(IntegrityError):
+            session.commit()

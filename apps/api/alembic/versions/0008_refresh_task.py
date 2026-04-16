@@ -33,6 +33,14 @@ def upgrade() -> None:
         "stock_refresh_task",
         ["stock_code", "status", "start_time"],
     )
+    op.create_index(
+        "uq_stock_refresh_task_inflight_stock_code",
+        "stock_refresh_task",
+        ["stock_code"],
+        unique=True,
+        postgresql_where=sa.text("status IN ('queued', 'running')"),
+        sqlite_where=sa.text("status IN ('queued', 'running')"),
+    )
 
     op.create_table(
         "stock_refresh_stage_log",
@@ -58,5 +66,6 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.drop_index("ix_stock_refresh_stage_log_task_id_stage_name", table_name="stock_refresh_stage_log")
     op.drop_table("stock_refresh_stage_log")
+    op.drop_index("uq_stock_refresh_task_inflight_stock_code", table_name="stock_refresh_task")
     op.drop_index("ix_stock_refresh_task_stock_code_status_start_time", table_name="stock_refresh_task")
     op.drop_table("stock_refresh_task")

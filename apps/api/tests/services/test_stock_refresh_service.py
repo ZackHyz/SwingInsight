@@ -315,3 +315,146 @@ def test_run_marks_failed_when_first_stage_raises(monkeypatch) -> None:
     assert stage_logs[0].error_message == "price import exploded"
     assert stage_logs[0].rows_changed is None
     assert stage_logs[0].duration_ms is not None
+
+
+def test_rerun_after_partial_resets_attempt_times_and_clears_old_stage_logs(monkeypatch) -> None:
+    from swinginsight.db.models.refresh import StockRefreshStageLog
+    from swinginsight.jobs.align_news import AlignNewsResult
+    from swinginsight.jobs.process_news import ProcessNewsResult
+    from swinginsight.services import stock_research_service as stock_research_module
+    from swinginsight.services import stock_refresh_service as stock_refresh_module
+    from swinginsight.services.stock_refresh_service import StockRefreshService
+
+    session = build_session()
+    service = StockRefreshService(session)
+    task = service.enqueue("600010")
+
+    monkeypatch.setattr(
+        stock_research_module.StockResearchService,
+        "prepare_refresh",
+        lambda self, stock_code: stock_research_module.RefreshPreparation(
+            latest_trade_date_before_refresh=date(2026, 4, 15),
+            should_refresh_remote=True,
+        ),
+    )
+    monkeypatch.setattr(
+        stock_research_module.StockResearchService,
+        "refresh_live_prices",
+        lambda self, stock_code, latest_trade_date: stock_research_module.PriceRefreshResult(
+            source="akshare",
+            inserted=1,
+            updated=0,
+            skipped=0,
+        ),
+    )
+    monkeypatch.setattr(
+        stock_research_module.StockResearchService,
+        "load_latest_trade_date",
+        lambda self, stock_code: date(2026, 4, 16),
+    )
+    monkeypatch.setattr(
+        stock_research_module.StockResearchService,
+        "needs_rebuild",
+        lambda self, *, stock_code, latest_trade_date: False,
+    )
+    monkeypatch.setattr(
+        stock_research_module.StockResearchService,
+        "resolve_news_window",
+        lambda self, *, anchor_date: (date(2026, 4, 2), date(2026, 4, 16)),
+    )
+    monkeypatch.setattr(
+        stock_research_module.StockResearchService,
+        "import_news_window",
+        lambda self, stock_code, *, start_date, end_date: 1,
+    )
+    monkeypatch.setattr(
+        stock_research_module.StockResearchService,
+        "process_news_window",
+        lambda self, stock_code, *, start_date, end_date: ProcessNewsResult(processed_count=1, duplicates=0),
+    )
+    monkeypatch.setattr(
+        stock_research_module.StockResearchService,
+        "align_news_window",
+        lambda self, stock_code, *, start_date, end_date: AlignNewsResult(point_mappings=1, segment_mappings=0),
+    )
+    monkeypatch.setattr(
+        stock_research_module.StockResearchService,
+        "materialize_refresh_artifacts",
+        lambda self, *, stock_code, latest_trade_date, needs_rebuild, has_live_price_updates, news_refresh: 2,
+    )
+    monkeypatch.setattr(
+        stock_research_module.StockResearchService,
+        "stock_exists",
+        lambda self, stock_code: True,
+    )
+
+    first_attempt_times = iter(
+        datetime(2026, 4, 16, 10, 0, second, tzinfo=UTC).replace(tzinfo=None)
+        for second in range(14)
+    )
+    monkeypatch.setattr(stock_refresh_module, "_utcnow", lambda: next(first_attempt_times))
+
+    def fail_prediction(self, *, stock_code: str, latest_trade_date: date) -> object:
+        raise RuntimeError("prediction exploded")
+
+    monkeypatch.setattr(
+        stock_research_module.StockResearchService,
+        "predict_for_refresh",
+        fail_prediction,
+    )
+
+    first_result = service.run(task.id)
+    first_stage_logs = session.scalars(
+        select(StockRefreshStageLog)
+        .where(StockRefreshStageLog.task_id == task.id)
+        .order_by(StockRefreshStageLog.id.asc())
+    ).all()
+    first_status = first_result.status
+    first_start_time = first_result.start_time
+    first_end_time = first_result.end_time
+    first_stage_statuses = [log.status for log in first_stage_logs]
+
+    second_attempt_times = iter(
+        datetime(2026, 4, 16, 11, 0, second, tzinfo=UTC).replace(tzinfo=None)
+        for second in range(14)
+    )
+    monkeypatch.setattr(stock_refresh_module, "_utcnow", lambda: next(second_attempt_times))
+    monkeypatch.setattr(
+        stock_research_module.StockResearchService,
+        "predict_for_refresh",
+        lambda self, *, stock_code, latest_trade_date: object(),
+    )
+
+    second_result = service.run(task.id)
+    second_stage_logs = session.scalars(
+        select(StockRefreshStageLog)
+        .where(StockRefreshStageLog.task_id == task.id)
+        .order_by(StockRefreshStageLog.id.asc())
+    ).all()
+
+    latest_status = service.latest_status("600010")
+
+    assert first_status == "partial"
+    assert first_start_time == datetime(2026, 4, 16, 10, 0, 0)
+    assert first_end_time == datetime(2026, 4, 16, 10, 0, 13)
+    assert len(first_stage_logs) == 6
+    assert first_stage_statuses[-1] == "failed"
+
+    assert second_result.status == "success"
+    assert second_result.start_time == datetime(2026, 4, 16, 11, 0, 0)
+    assert second_result.end_time == datetime(2026, 4, 16, 11, 0, 13)
+    assert len(second_stage_logs) == 6
+    assert [log.stage_name for log in second_stage_logs] == [
+        "price_import",
+        "news_import",
+        "news_process",
+        "news_align",
+        "pattern_materialize",
+        "prediction",
+    ]
+    assert [log.status for log in second_stage_logs] == ["success"] * 6
+    assert all(log.start_time >= datetime(2026, 4, 16, 11, 0, 1) for log in second_stage_logs)
+    assert latest_status is not None
+    assert latest_status["status"] == "success"
+    assert latest_status["start_time"] == "2026-04-16T11:00:00"
+    assert len(latest_status["stages"]) == 6

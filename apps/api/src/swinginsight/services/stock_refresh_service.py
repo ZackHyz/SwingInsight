@@ -4,7 +4,8 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from typing import Any, Callable
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from swinginsight.db.models.refresh import StockRefreshStageLog, StockRefreshTask
@@ -35,7 +36,14 @@ class StockRefreshService:
             status="queued",
         )
         self.session.add(task)
-        self.session.commit()
+        try:
+            self.session.commit()
+        except IntegrityError:
+            self.session.rollback()
+            existing = self._latest_inflight_task(stock_code)
+            if existing is not None:
+                return existing
+            raise
         self.session.refresh(task)
         return task
 
@@ -52,9 +60,10 @@ class StockRefreshService:
         preparation = research.prepare_refresh(task.stock_code)
 
         task.status = "running"
-        task.start_time = task.start_time or _utcnow()
+        task.start_time = _utcnow()
         task.end_time = None
         task.error_message = None
+        self.session.execute(delete(StockRefreshStageLog).where(StockRefreshStageLog.task_id == task.id))
         self.session.commit()
 
         completed_stage_count = 0
