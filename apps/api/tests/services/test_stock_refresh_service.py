@@ -44,6 +44,22 @@ def test_enqueue_refresh_reuses_running_task() -> None:
     assert len(tasks) == 1
 
 
+def test_enqueue_refresh_reuses_queued_task() -> None:
+    from swinginsight.db.models.refresh import StockRefreshTask
+    from swinginsight.services.stock_refresh_service import StockRefreshService
+
+    session = build_session()
+    service = StockRefreshService(session)
+
+    first = service.enqueue("600010")
+    second = service.enqueue("600010")
+
+    tasks = session.scalars(select(StockRefreshTask).where(StockRefreshTask.stock_code == "600010")).all()
+    assert first.status == "queued"
+    assert first.id == second.id
+    assert len(tasks) == 1
+
+
 def test_run_records_stage_transitions_for_success_path(monkeypatch) -> None:
     from swinginsight.db.models.refresh import StockRefreshStageLog
     from swinginsight.jobs.align_news import AlignNewsResult
@@ -253,3 +269,49 @@ def test_run_marks_partial_when_late_stage_fails(monkeypatch) -> None:
     assert latest_status["error_message"] == "prediction exploded"
     assert latest_status["stages"][-1]["status"] == "failed"
     assert latest_status["stages"][-1]["error_message"] == "prediction exploded"
+
+
+def test_run_marks_failed_when_first_stage_raises(monkeypatch) -> None:
+    from swinginsight.db.models.refresh import StockRefreshStageLog
+    from swinginsight.services import stock_research_service as stock_research_module
+    from swinginsight.services.stock_refresh_service import StockRefreshService
+
+    session = build_session()
+    service = StockRefreshService(session)
+    task = service.enqueue("600010")
+
+    monkeypatch.setattr(
+        stock_research_module.StockResearchService,
+        "prepare_refresh",
+        lambda self, stock_code: stock_research_module.RefreshPreparation(
+            latest_trade_date_before_refresh=date(2026, 4, 15),
+            should_refresh_remote=True,
+        ),
+    )
+
+    def raise_price_import_error(self, stock_code: str, latest_trade_date: date | None) -> object:
+        raise RuntimeError("price import exploded")
+
+    monkeypatch.setattr(
+        stock_research_module.StockResearchService,
+        "refresh_live_prices",
+        raise_price_import_error,
+    )
+
+    updated_task = service.run(task.id)
+    stage_logs = session.scalars(
+        select(StockRefreshStageLog)
+        .where(StockRefreshStageLog.task_id == task.id)
+        .order_by(StockRefreshStageLog.id.asc())
+    ).all()
+
+    assert updated_task.status == "failed"
+    assert updated_task.error_message == "price import exploded"
+    assert updated_task.start_time is not None
+    assert updated_task.end_time is not None
+    assert len(stage_logs) == 1
+    assert stage_logs[0].stage_name == "price_import"
+    assert stage_logs[0].status == "failed"
+    assert stage_logs[0].error_message == "price import exploded"
+    assert stage_logs[0].rows_changed is None
+    assert stage_logs[0].duration_ms is not None
