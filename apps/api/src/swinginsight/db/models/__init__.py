@@ -7,6 +7,7 @@ from swinginsight.db.models.news import (
     PointNewsMap,
     SegmentNewsMap,
 )
+from swinginsight.db.models.refresh import StockRefreshStageLog, StockRefreshTask
 from swinginsight.db.models.pattern import PatternFeature, PatternFutureStat, PatternMatchResult, PatternWindow
 from swinginsight.db.models.prediction import BacktestResult, PredictionResult, ScoreLog
 from swinginsight.db.models.segment import SegmentFeature, SegmentLabel, SwingSegment
@@ -29,6 +30,8 @@ __all__ = [
     "PointRevisionLog",
     "PredictionResult",
     "ScoreLog",
+    "StockRefreshStageLog",
+    "StockRefreshTask",
     "SegmentFeature",
     "SegmentLabel",
     "SegmentNewsMap",
