@@ -170,6 +170,7 @@ export type ApiClient = {
   getSegmentChartWindow: (segmentId: string) => Promise<SegmentChartWindowData>;
   getSegmentDetail: (segmentId: string) => Promise<SegmentDetailData>;
   getSegmentLibrary: () => Promise<SegmentLibraryData>;
+  getWatchlist?: () => Promise<MarketWatchlistData>;
   getPrediction: (stockCode: string, predictDate: string) => Promise<PredictionData>;
   getPatternScore?: (stockCode: string) => Promise<PatternScoreData>;
   getPatternSimilarCases?: (stockCode: string) => Promise<PatternSimilarCaseData[]>;
@@ -267,6 +268,21 @@ export type SegmentLibraryData = {
   }>;
 };
 
+export type MarketWatchlistData = {
+  scan_date: string | null;
+  rows: Array<{
+    stock_code: string;
+    stock_name: string | null;
+    rank_no: number;
+    rank_score: number;
+    pattern_score: number;
+    confidence: number;
+    sample_count: number;
+    event_density: number;
+    latest_refresh_at?: string | null;
+  }>;
+};
+
 export type PredictionData = {
   stock_code: string;
   predict_date: string;
@@ -335,6 +351,13 @@ export const apiClient: ApiClient = {
       throw new Error(`Failed to load segment library: ${response.status}`);
     }
     return (await response.json()) as SegmentLibraryData;
+  },
+  async getWatchlist() {
+    const response = await fetch(`${API_BASE}/watchlist`);
+    if (!response.ok) {
+      throw new Error(`Failed to load watchlist: ${response.status}`);
+    }
+    return (await response.json()) as MarketWatchlistData;
   },
   async getPrediction(stockCode, predictDate) {
     const response = await fetch(`${API_BASE}/predictions/${stockCode}?predict_date=${predictDate}`);

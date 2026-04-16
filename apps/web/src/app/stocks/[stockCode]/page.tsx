@@ -339,6 +339,7 @@ export default function StockResearchPage(props: StockResearchPageProps) {
               stockCode={activeStockCode}
               prices={pageData.prices}
               autoPoints={pageData.auto_turning_points}
+              provisionalPoints={pageData.provisional_turning_points ?? []}
               finalPoints={pageData.final_turning_points}
               currentState={pageData.current_state}
             />

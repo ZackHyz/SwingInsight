@@ -1,3 +1,6 @@
+import { useEffect, useMemo, useState } from "react";
+
+import { KlineChart } from "./kline-chart";
 import { SimilarCaseList } from "./similar-case-list";
 import { PatternScoreCard } from "./pattern-score-card";
 import { OutcomeDistribution } from "./outcome-distribution";
@@ -6,13 +9,30 @@ import { getMarketValueClass } from "../lib/market-tone";
 import { usePatternInsight } from "../hooks/use-pattern-insight";
 
 type PredictionPanelProps = {
-  apiClient: Pick<ApiClient, "getSegmentChartWindow" | "getPatternScore" | "getPatternSimilarCases" | "getPatternGroupStat">;
+  apiClient: Pick<ApiClient, "getSegmentChartWindow" | "getSegmentDetail" | "getPatternScore" | "getPatternSimilarCases" | "getPatternGroupStat">;
   stockCode: string;
   prices: StockResearchData["prices"];
   autoPoints: StockResearchData["auto_turning_points"];
+  provisionalPoints?: StockResearchData["provisional_turning_points"];
   finalPoints: StockResearchData["final_turning_points"];
   currentState: StockResearchData["current_state"];
 };
+
+type RankingMode = "same_symbol_first" | "similarity_first" | "sample_quality_first";
+
+function resolveSampleQuality(item: PatternSimilarCaseData): number {
+  let quality = 0;
+  if (item.future_return_5d !== undefined && item.future_return_5d !== null) {
+    quality += 1;
+  }
+  if (item.future_return_10d !== undefined && item.future_return_10d !== null) {
+    quality += 1;
+  }
+  if (item.future_return_20d !== undefined && item.future_return_20d !== null) {
+    quality += 1;
+  }
+  return quality;
+}
 
 const PROBABILITY_LABELS: Record<string, string> = {
   up_1d: "次日上涨",
@@ -72,8 +92,12 @@ function getProbabilityValueClass(key: string): string {
   return "market-value market-value--neutral";
 }
 
-export function PredictionPanel({ apiClient, stockCode, prices, autoPoints, finalPoints, currentState }: PredictionPanelProps) {
+export function PredictionPanel({ apiClient, stockCode, prices, autoPoints, provisionalPoints = [], finalPoints, currentState }: PredictionPanelProps) {
   const patternInsight = usePatternInsight(stockCode, apiClient);
+  const [rankingMode, setRankingMode] = useState<RankingMode>("same_symbol_first");
+  const [selectedCaseChart, setSelectedCaseChart] = useState<Awaited<ReturnType<NonNullable<ApiClient["getSegmentChartWindow"]>>> | null>(null);
+  const [selectedCaseDetail, setSelectedCaseDetail] = useState<Awaited<ReturnType<NonNullable<ApiClient["getSegmentDetail"]>>> | null>(null);
+  const [compareLoading, setCompareLoading] = useState(false);
   const probabilities = currentState.probabilities ?? {};
   const keyFeatures = currentState.key_features ?? {};
   const riskFlags = currentState.risk_flags ?? {};
@@ -90,9 +114,73 @@ export function PredictionPanel({ apiClient, stockCode, prices, autoPoints, fina
         stock_code: item.stock_code,
         segment_id: item.segment_id,
       }));
-  const similarCases = patternInsight.status === "ready" ? patternInsight.data.similarCases : fallbackSimilarCases;
+  const baseSimilarCases = patternInsight.status === "ready" ? patternInsight.data.similarCases : fallbackSimilarCases;
+  const similarCases = useMemo(() => {
+    const sorted = [...baseSimilarCases];
+    if (rankingMode === "similarity_first") {
+      sorted.sort((left, right) => right.similarity_score - left.similarity_score);
+      return sorted;
+    }
+    if (rankingMode === "sample_quality_first") {
+      sorted.sort((left, right) => {
+        const qualityGap = resolveSampleQuality(right) - resolveSampleQuality(left);
+        if (qualityGap !== 0) {
+          return qualityGap;
+        }
+        return right.similarity_score - left.similarity_score;
+      });
+      return sorted;
+    }
+    sorted.sort((left, right) => {
+      const leftSame = left.stock_code === stockCode ? 1 : 0;
+      const rightSame = right.stock_code === stockCode ? 1 : 0;
+      if (leftSame !== rightSame) {
+        return rightSame - leftSame;
+      }
+      return right.similarity_score - left.similarity_score;
+    });
+    return sorted;
+  }, [baseSimilarCases, rankingMode, stockCode]);
+
+  useEffect(() => {
+    if (patternInsight.selectedCaseId === null && similarCases[0]?.window_id !== undefined) {
+      patternInsight.setSelectedCaseId(similarCases[0].window_id ?? null);
+    }
+  }, [patternInsight, similarCases]);
+
   const selectedCase = similarCases.find((item) => item.window_id === patternInsight.selectedCaseId) ?? null;
   const groupStat = currentState.group_stat;
+
+  useEffect(() => {
+    if (selectedCase?.segment_id === undefined || selectedCase?.segment_id === null || apiClient.getSegmentChartWindow === undefined) {
+      setSelectedCaseChart(null);
+      setSelectedCaseDetail(null);
+      return;
+    }
+    let cancelled = false;
+    setCompareLoading(true);
+    Promise.all([
+      apiClient.getSegmentChartWindow(String(selectedCase.segment_id)),
+      apiClient.getSegmentDetail ? apiClient.getSegmentDetail(String(selectedCase.segment_id)) : Promise.resolve(null),
+    ])
+      .then(([chart, detail]) => {
+        if (!cancelled) {
+          setSelectedCaseChart(chart);
+          setSelectedCaseDetail(detail);
+          setCompareLoading(false);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setSelectedCaseChart(null);
+          setSelectedCaseDetail(null);
+          setCompareLoading(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [apiClient, selectedCase?.segment_id]);
 
   return (
     <aside className="terminal-panel">
@@ -142,6 +230,21 @@ export function PredictionPanel({ apiClient, stockCode, prices, autoPoints, fina
           score={patternInsight.status === "ready" ? patternInsight.data.score : null}
           loading={patternInsight.status === "loading"}
         />
+        <section className="terminal-stack">
+          <h3>排序模式</h3>
+          <label className="terminal-field">
+            <span className="sr-only">排序模式</span>
+            <select
+              aria-label="排序模式"
+              value={rankingMode}
+              onChange={(event) => setRankingMode(event.target.value as RankingMode)}
+            >
+              <option value="same_symbol_first">同标的优先</option>
+              <option value="similarity_first">相似度优先</option>
+              <option value="sample_quality_first">样本质量优先</option>
+            </select>
+          </label>
+        </section>
         <OutcomeDistribution
           groupStat={patternInsight.status === "ready" ? patternInsight.data.groupStat : null}
           loading={patternInsight.status === "loading"}
@@ -169,7 +272,53 @@ export function PredictionPanel({ apiClient, stockCode, prices, autoPoints, fina
           items={similarCases}
           selectedCaseId={patternInsight.selectedCaseId}
           onSelectCase={patternInsight.setSelectedCaseId}
+          currentStockCode={stockCode}
         />
+        <section className="terminal-stack">
+          <h3>样本对比视图</h3>
+          {selectedCase === null ? (
+            <p className="terminal-copy">请先在相似样本时间线中选择样本。</p>
+          ) : compareLoading ? (
+            <p className="terminal-copy">正在加载样本对比...</p>
+          ) : selectedCaseChart === null ? (
+            <p className="terminal-copy">样本图表暂不可用。</p>
+          ) : (
+            <>
+              <div className="terminal-grid terminal-grid--workspace">
+                <KlineChart
+                  title="查询窗口"
+                  mode="readonly"
+                  prices={prices}
+                  autoPoints={autoPoints}
+                  provisionalPoints={provisionalPoints}
+                  finalPoints={finalPoints}
+                  highlightRange={
+                    currentState.query_window === undefined || currentState.query_window === null
+                      ? undefined
+                      : {
+                          start_date: currentState.query_window.start_date,
+                          end_date: currentState.query_window.end_date,
+                        }
+                  }
+                />
+                <KlineChart
+                  title="匹配样本"
+                  mode="readonly"
+                  prices={selectedCaseChart.prices}
+                  autoPoints={selectedCaseChart.auto_turning_points}
+                  finalPoints={selectedCaseChart.final_turning_points}
+                  highlightRange={selectedCaseChart.highlight_range}
+                />
+              </div>
+              <p className="terminal-copy">
+                事件摘要:{" "}
+                {selectedCaseDetail?.news_timeline?.length
+                  ? selectedCaseDetail.news_timeline.slice(0, 3).map((item) => item.title).join("；")
+                  : "暂无事件摘要"}
+              </p>
+            </>
+          )}
+        </section>
       </div>
     </aside>
   );

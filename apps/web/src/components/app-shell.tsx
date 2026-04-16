@@ -16,6 +16,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/", label: "Overview" },
   { href: "/stocks/600157", label: "Research" },
   { href: "/library", label: "Pattern Library" },
+  { href: "/watchlist", label: "Watchlist" },
 ];
 
 function isActivePath(currentPath: string, href: string): boolean {

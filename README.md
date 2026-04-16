@@ -24,7 +24,7 @@ cd apps/api
 
 ### Frontend
 
-The web client is a dark terminal-style research workspace covering the landing page, stock research view, pattern library, and segment drill-down screens.
+The web client is a dark terminal-style research workspace covering the landing page, stock research view, pattern library, ranked watchlist, and segment drill-down screens.
 
 ```bash
 cd apps/web
@@ -297,9 +297,24 @@ Default report output directory:
 Frontend pattern insight panel now includes:
 
 - `PatternScoreCard` (calibrated score with confidence and optional raw debug view)
-- `SimilarCasesTimeline` v1 static list
+- `SimilarCasesTimeline` with ranking modes (`same-symbol-first`, `similarity-first`, `sample-quality-first`)
+- Similar-case drill-down side-by-side comparison (query window vs matched window)
 - `OutcomeDistribution` with 5d/10d/20d horizon tabs and current prediction marker
 - Query-window overlay on Kline chart
+
+## Nightly Market Scan And Ranked Watchlist (P1)
+
+Run a local nightly scan to materialize ranked candidates:
+
+```bash
+cd apps/api
+../../.venv/bin/python scripts/run_nightly_market_scan.py --scan-date 2026-04-16 --top-k 50
+```
+
+Serve or query the persisted leaderboard:
+
+- API endpoint: `GET /watchlist`
+- Web entry: `/watchlist`
 
 ## Failure Debugging
 

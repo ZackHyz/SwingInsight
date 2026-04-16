@@ -30,6 +30,9 @@ export default function HomePage() {
               <a className="terminal-button" href="/library">
                 Browse Pattern Library
               </a>
+              <a className="terminal-button" href="/watchlist">
+                Open Ranked Watchlist
+              </a>
               <a className="terminal-button" href="/segments/1">
                 Inspect Demo Segment
               </a>

@@ -5,6 +5,7 @@ import HomePage from "./app/page";
 import LibraryPage from "./app/library/page";
 import SegmentDetailPage from "./app/segments/[segmentId]/page";
 import StockResearchPage from "./app/stocks/[stockCode]/page";
+import WatchlistPage from "./app/watchlist/page";
 import "./styles/app-shell.css";
 
 function resolveStockCode(pathname: string): string {
@@ -24,6 +25,10 @@ function App() {
 
   if (window.location.pathname === "/library") {
     return <LibraryPage />;
+  }
+
+  if (window.location.pathname === "/watchlist") {
+    return <WatchlistPage />;
   }
 
   if (window.location.pathname.startsWith("/segments/")) {

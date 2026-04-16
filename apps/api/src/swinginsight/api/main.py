@@ -19,6 +19,7 @@ from swinginsight.api.routes.stocks import (
     get_stock_research_payload,
 )
 from swinginsight.api.routes.turning_points import commit_turning_points
+from swinginsight.api.routes.watchlist import get_watchlist_payload
 from swinginsight.db.session import session_scope
 from swinginsight.services.feature_materialization_service import get_segment_library_rows
 from swinginsight.services.score_validation_service import ScoreValidationService
@@ -127,6 +128,10 @@ def create_app(session_factory: Callable[[], Session] | None = None) -> FastAPI:
     @app.get("/library")
     def get_library(session: Session = Depends(get_session)) -> dict[str, object]:
         return {"rows": get_segment_library_rows(session)}
+
+    @app.get("/watchlist")
+    def get_watchlist(session: Session = Depends(get_session)) -> dict[str, object]:
+        return get_watchlist_payload(session=session)
 
     @app.get("/predictions/{stock_code}")
     def get_prediction(stock_code: str, predict_date: date, session: Session = Depends(get_session)) -> dict[str, object]:

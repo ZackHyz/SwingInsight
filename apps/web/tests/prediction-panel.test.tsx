@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import StockResearchPage from "../src/app/stocks/[stockCode]/page";
@@ -106,11 +106,21 @@ function buildData(): StockResearchData {
 describe("prediction panel", () => {
   afterEach(() => cleanup());
 
-  it("renders state, probabilities, and similar cases", () => {
+  it("renders state, probabilities, and similar cases", async () => {
     const apiClient: ApiClient = {
       getStockResearch: vi.fn(),
       commitTurningPoints: vi.fn(),
-      getSegmentChartWindow: vi.fn(),
+      getSegmentChartWindow: vi.fn().mockResolvedValue({
+        segment: { id: 12, stock_code: "000001", start_date: "2024-02-01", end_date: "2024-02-20" },
+        highlight_range: { start_date: "2024-02-05", end_date: "2024-02-13" },
+        prices: [
+          { trade_date: "2024-02-01", open_price: 10.1, high_price: 10.4, low_price: 9.9, close_price: 10.2, volume: 10000 },
+          { trade_date: "2024-02-05", open_price: 10.2, high_price: 10.6, low_price: 10.1, close_price: 10.5, volume: 12000 },
+          { trade_date: "2024-02-13", open_price: 10.5, high_price: 10.8, low_price: 10.4, close_price: 10.6, volume: 14000 },
+        ],
+        auto_turning_points: [{ point_date: "2024-02-05", point_type: "trough", point_price: 10.1, source_type: "system" }],
+        final_turning_points: [{ point_date: "2024-02-13", point_type: "peak", point_price: 10.8, source_type: "manual" }],
+      }),
       getSegmentDetail: vi.fn(),
       getSegmentLibrary: vi.fn(),
       getPrediction: vi.fn(),
@@ -132,7 +142,7 @@ describe("prediction panel", () => {
 
     expect(scoped.getByText("当前状态: 主升初期")).toBeTruthy();
     expect(scoped.getByText("相似样本时间线")).toBeTruthy();
-    expect(scoped.getByText(/按相似度排序的历史窗口列表/)).toBeTruthy();
+    expect(scoped.getByText(/按排序模式输出的历史窗口列表/)).toBeTruthy();
     expect(panel?.textContent).toContain("相似样本数 20");
     expect(panel?.textContent).toContain("1日均值 -1.82%");
     expect(panel?.textContent).toContain("1日胜率 35.0%");
@@ -140,6 +150,8 @@ describe("prediction panel", () => {
     expect(panel?.textContent).toContain("10日均值 +0.91%");
     expect(items.at(-1)?.textContent).toContain("窗口日期 2024-02-05 至 2024-02-13 · 相似度 91.0%");
     expect(items.at(-1)?.textContent).toContain("5日 -2.80% · 10日 +8.60%");
+    expect(items.at(-1)?.textContent).toContain("20日");
+    expect(items.at(-1)?.textContent).toContain("同标的");
     expect(items.at(-1)?.textContent).toContain("样本股票 000001 · 波段ID 12");
     expect(panel?.textContent).toContain("次日上涨 64.0%");
     expect(panel?.textContent).toContain("次日震荡 20.0%");
@@ -148,6 +160,12 @@ describe("prediction panel", () => {
     expect(panel?.textContent).toContain("量比(5日) 1.4");
     expect(panel?.textContent).toContain("正向新闻占比 0.75");
     expect(scoped.getByText("回撤风险: 低")).toBeTruthy();
+    expect(scoped.getByRole("heading", { name: "排序模式" })).toBeTruthy();
+    fireEvent.change(scoped.getByLabelText("排序模式"), { target: { value: "similarity_first" } });
+    fireEvent.click(scoped.getByRole("button", { name: "已选中" }));
+    await waitFor(() => {
+      expect(scoped.getByText("样本对比视图")).toBeTruthy();
+    });
     expect(screen.getByText("历史买卖点占位: 1")).toBeTruthy();
     expect(screen.getByText("Liquidity support boosts banks")).toBeTruthy();
   });

@@ -41,6 +41,8 @@ describe("similar case list", () => {
     expect(screen.getByText(/窗口日期 2025-08-01 至 2025-08-07 · 相似度 83.4%/)).toBeTruthy();
     expect(screen.getByText("+4.80%")).toBeTruthy();
     expect(screen.getByText("-1.20%")).toBeTruthy();
+    expect(screen.getByText(/20日/)).toBeTruthy();
+    expect(screen.getAllByText(/跨标的/).length).toBeGreaterThan(0);
     expect(screen.getByText(/样本股票 600157 · 波段ID 12/)).toBeTruthy();
     expect(screen.getByText("已选中")).toBeTruthy();
 
