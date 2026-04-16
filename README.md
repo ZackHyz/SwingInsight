@@ -276,6 +276,24 @@ cd apps/api
 
 The diagnosis output helps identify useful features before running full backtests and calibration.
 
+## Batch Evaluation Suite (P1)
+
+Run fixed-sample batch evaluation (4 categories x 10 symbols) and generate one Markdown report:
+
+```bash
+cd apps/api
+../../.venv/bin/python scripts/run_batch_evaluation.py \
+  --sample-pool config/evaluation/sample_pool.v1.json \
+  --start 2022-01-01 \
+  --end 2025-12-31 \
+  --horizons 5 10 20
+```
+
+Default report output directory:
+
+- `apps/api/reports/evaluation/`
+- filename format: `batch-eval-YYYYMMDD-HHMM.md`
+
 Frontend pattern insight panel now includes:
 
 - `PatternScoreCard` (calibrated score with confidence and optional raw debug view)
