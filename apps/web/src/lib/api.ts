@@ -163,6 +163,8 @@ export type TurningPointCommitResponse = {
 
 export type ApiClient = {
   getStockResearch: (stockCode: string) => Promise<StockResearchData>;
+  startStockRefresh?: (stockCode: string) => Promise<StockRefreshTaskData>;
+  getStockRefreshStatus?: (stockCode: string) => Promise<StockRefreshStatusData>;
   commitTurningPoints: (stockCode: string, payload: TurningPointCommitPayload) => Promise<TurningPointCommitResponse>;
   getSegmentChartWindow: (segmentId: string) => Promise<SegmentChartWindowData>;
   getSegmentDetail: (segmentId: string) => Promise<SegmentDetailData>;
@@ -184,6 +186,20 @@ export type PatternScoreData = {
   confidence: "low" | "medium" | "high";
   calibrated?: boolean;
 };
+
+export type StockRefreshStatus = "queued" | "running" | "success" | "failed" | "partial";
+
+export type StockRefreshTaskData = {
+  task_id: number;
+  stock_code: string;
+  status: StockRefreshStatus;
+  start_time?: string | null;
+  end_time?: string | null;
+  updated_at?: string | null;
+  error_message?: string | null;
+};
+
+export type StockRefreshStatusData = StockRefreshTaskData;
 
 export type PatternSimilarCaseData = {
   window_id?: number | null;
@@ -270,6 +286,20 @@ export const apiClient: ApiClient = {
       throw new Error(`Failed to load stock research: ${response.status}`);
     }
     return (await response.json()) as StockResearchData;
+  },
+  async startStockRefresh(stockCode) {
+    const response = await fetch(`${API_BASE}/stocks/${stockCode}/refresh`, { method: "POST" });
+    if (!response.ok) {
+      throw new Error(`Failed to start stock refresh: ${response.status}`);
+    }
+    return (await response.json()) as StockRefreshTaskData;
+  },
+  async getStockRefreshStatus(stockCode) {
+    const response = await fetch(`${API_BASE}/stocks/${stockCode}/refresh-status`);
+    if (!response.ok) {
+      throw new Error(`Failed to load stock refresh status: ${response.status}`);
+    }
+    return (await response.json()) as StockRefreshStatusData;
   },
   async commitTurningPoints(stockCode, payload) {
     const response = await fetch(`${API_BASE}/stocks/${stockCode}/turning-points/commit`, {

@@ -583,7 +583,7 @@ def test_get_segment_chart_window_returns_segment_context_with_pre_and_post_trad
     assert len(payload["final_turning_points"]) == 2
 
 
-def test_get_stock_research_payload_fetches_live_data_when_database_is_missing(monkeypatch) -> None:
+def test_get_stock_research_payload_returns_404_when_database_is_missing(monkeypatch) -> None:
     from fastapi.testclient import TestClient
     from swinginsight.api.main import create_app
     from swinginsight.db.models.market_data import DailyPrice
@@ -591,17 +591,7 @@ def test_get_stock_research_payload_fetches_live_data_when_database_is_missing(m
     from swinginsight.ingest.adapters.akshare_daily_price_feed import AkshareDailyPriceFeed
     from swinginsight.services.stock_research_service import research_window_start
 
-    live_prices = [
-        (date(2024, 1, 2), 1.44, 1.45, 1.40, 1.41),
-        (date(2024, 1, 3), 1.41, 1.42, 1.35, 1.36),
-        (date(2024, 1, 4), 1.35, 1.36, 1.28, 1.30),
-        (date(2024, 1, 5), 1.30, 1.38, 1.29, 1.37),
-        (date(2024, 1, 8), 1.37, 1.48, 1.36, 1.47),
-        (date(2024, 1, 9), 1.47, 1.49, 1.40, 1.42),
-        (date(2024, 1, 10), 1.42, 1.43, 1.33, 1.35),
-        (date(2024, 1, 11), 1.35, 1.41, 1.34, 1.40),
-        (date(2024, 1, 12), 1.40, 1.53, 1.39, 1.50),
-    ]
+    fetch_calls: list[tuple[str, date | None, date | None]] = []
 
     def fake_fetch_stock_metadata(self, stock_code: str) -> dict[str, object]:
         assert stock_code == "600157"
@@ -614,25 +604,8 @@ def test_get_stock_research_payload_fetches_live_data_when_database_is_missing(m
         }
 
     def fake_fetch_daily_prices(self, stock_code: str, start: date | None, end: date | None) -> list[dict[str, object]]:
-        assert stock_code == "600157"
-        assert start == research_window_start()
-        assert end is None
-        return [
-            {
-                "stock_code": stock_code,
-                "trade_date": trade_date,
-                "open_price": open_price,
-                "high_price": high_price,
-                "low_price": low_price,
-                "close_price": close_price,
-                "adj_type": "qfq",
-                "volume": 1000,
-                "amount": 100000.0,
-                "turnover_rate": 1.2,
-                "data_source": "akshare",
-            }
-            for trade_date, open_price, high_price, low_price, close_price in live_prices
-        ]
+        fetch_calls.append((stock_code, start, end))
+        return []
 
     monkeypatch.setattr(AkshareDailyPriceFeed, "fetch_stock_metadata", fake_fetch_stock_metadata)
     monkeypatch.setattr(AkshareDailyPriceFeed, "fetch_daily_prices", fake_fetch_daily_prices)
@@ -643,25 +616,12 @@ def test_get_stock_research_payload_fetches_live_data_when_database_is_missing(m
 
     response = client.get("/stocks/600157")
 
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload["stock"]["stock_code"] == "600157"
-    assert payload["stock"]["stock_name"] == "永泰能源"
-    assert len(payload["prices"]) == len(live_prices)
-    assert payload["final_turning_points"][-1]["point_date"] == date(2024, 1, 10).isoformat()
-    assert payload["final_turning_points"][-1]["point_type"] == "trough"
-
-    verification_session = session_factory()
-    stored_stock = verification_session.scalar(select(StockBasic).where(StockBasic.stock_code == "600157"))
-    stored_prices = verification_session.scalars(
-        select(DailyPrice).where(DailyPrice.stock_code == "600157").order_by(DailyPrice.trade_date.asc())
-    ).all()
-    assert stored_stock is not None
-    assert stored_stock.stock_name == "永泰能源"
-    assert len(stored_prices) == len(live_prices)
+    assert response.status_code == 404
+    assert response.json() == {"detail": "stock not found"}
+    assert fetch_calls == []
 
 
-def test_get_stock_research_payload_rebuilds_prediction_from_recent_window_when_old_prices_are_pathological(monkeypatch) -> None:
+def test_get_stock_research_payload_keeps_materialized_snapshot_when_old_prices_are_pathological(monkeypatch) -> None:
     from fastapi.testclient import TestClient
     from swinginsight.api.main import create_app
     from swinginsight.db.models.market_data import DailyPrice
@@ -763,10 +723,10 @@ def test_get_stock_research_payload_rebuilds_prediction_from_recent_window_when_
     assert response.status_code == 200
     payload = response.json()
     assert payload["stock"]["stock_code"] == "000002"
-    assert payload["current_state"]["label"] != "待生成"
+    assert payload["current_state"]["label"] == "待生成"
 
 
-def test_get_stock_research_payload_refreshes_today_price_when_stock_already_exists(monkeypatch) -> None:
+def test_get_stock_research_payload_does_not_refresh_today_price_when_stock_already_exists(monkeypatch) -> None:
     from fastapi.testclient import TestClient
     from swinginsight.api.main import create_app
     from swinginsight.db.models.market_data import DailyPrice
@@ -855,9 +815,9 @@ def test_get_stock_research_payload_refreshes_today_price_when_stock_already_exi
 
     assert response.status_code == 200
     payload = response.json()
-    assert fetch_calls
+    assert fetch_calls == []
     assert payload["prices"][-1]["trade_date"] == today.isoformat()
-    assert payload["prices"][-1]["close_price"] == 11.5
+    assert payload["prices"][-1]["close_price"] == 10.9
 
 
 def test_commit_turning_points_persists_logs_and_rebuilds_segments() -> None:

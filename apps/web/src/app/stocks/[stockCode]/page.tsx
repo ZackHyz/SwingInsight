@@ -7,7 +7,8 @@ import { PredictionPanel } from "../../../components/prediction-panel";
 import { StatusPill } from "../../../components/status-pill";
 import { TerminalPanel } from "../../../components/terminal-panel";
 import { TurningPointEditor } from "../../../components/turning-point-editor";
-import { apiClient, type ApiClient, type StockResearchData } from "../../../lib/api";
+import { useRefreshStatus } from "../../../hooks/use-refresh-status";
+import { apiClient, type ApiClient, type StockRefreshStatusData, type StockResearchData } from "../../../lib/api";
 import { getSignedTone, getStateTone } from "../../../lib/market-tone";
 
 type StockResearchPageProps = {
@@ -71,6 +72,49 @@ function resolveCountTone(count: number | undefined, tone: "success" | "danger")
   return tone;
 }
 
+function resolveRefreshTone(status: StockRefreshStatusData["status"] | undefined): "default" | "success" | "warning" | "danger" {
+  if (status === "success") {
+    return "success";
+  }
+  if (status === "failed") {
+    return "danger";
+  }
+  if (status === "running" || status === "queued" || status === "partial") {
+    return "warning";
+  }
+  return "default";
+}
+
+function resolveRefreshLabel(status: StockRefreshStatusData["status"] | undefined): string {
+  if (status === "queued") {
+    return "排队中";
+  }
+  if (status === "running") {
+    return "刷新中";
+  }
+  if (status === "success") {
+    return "已完成";
+  }
+  if (status === "failed") {
+    return "失败";
+  }
+  if (status === "partial") {
+    return "部分完成";
+  }
+  return "暂无记录";
+}
+
+function formatRefreshTime(value: string | null | undefined): string {
+  if (!value) {
+    return "--";
+  }
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return value;
+  }
+  return parsed.toLocaleString("zh-CN", { hour12: false });
+}
+
 export default function StockResearchPage(props: StockResearchPageProps) {
   const initialStockCode = props.stockCode ?? "600157";
   const client = props.apiClient ?? apiClient;
@@ -79,6 +123,7 @@ export default function StockResearchPage(props: StockResearchPageProps) {
   const [pageData, setPageData] = useState<StockResearchData | null>(props.initialData ?? null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [reloadVersion, setReloadVersion] = useState(0);
+  const refreshStatus = useRefreshStatus(activeStockCode, client);
 
   useEffect(() => {
     setActiveStockCode(initialStockCode);
@@ -160,6 +205,12 @@ export default function StockResearchPage(props: StockResearchPageProps) {
     pageData === null
       ? "Terminal workspace is syncing chart context, turning points, and prediction intelligence."
       : `${pageData.stock.market} ${pageData.stock.industry ? `/ ${pageData.stock.industry}` : ""} · 当前状态 ${pageData.current_state.label}`;
+  const refreshPillLabel = refreshStatus.error
+    ? "最近刷新 查询失败"
+    : `最近刷新 ${resolveRefreshLabel(refreshStatus.data?.status)} ${formatRefreshTime(
+        refreshStatus.data?.end_time ?? refreshStatus.data?.updated_at,
+      )}`;
+  const refreshPillTone = refreshStatus.loading ? "warning" : resolveRefreshTone(refreshStatus.data?.status);
 
   return (
     <AppShell
@@ -185,6 +236,7 @@ export default function StockResearchPage(props: StockResearchPageProps) {
             </button>
           </form>
           <StatusPill label={isLoading ? "Syncing Workspace" : "Research Live"} tone={isLoading ? "warning" : "default"} />
+          <StatusPill label={refreshPillLabel} tone={refreshPillTone} />
         </>
       }
     >

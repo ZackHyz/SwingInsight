@@ -165,7 +165,12 @@ Research payloads also expose these V1 fields on `/stocks/{code}` news items:
 - `event_types`
 - `event_conflict_flag`
 
-Page-driven research requests call the same incremental pipeline automatically for the latest trading-date window, then only rematerialize overlapping segment features instead of rebuilding all historical news mappings.
+`GET /stocks/{stock_code}` is now a read-only endpoint. It only returns already materialized research payloads and does not trigger ingestion or recomputation.
+
+Use explicit refresh endpoints to run the pipeline:
+
+- `POST /stocks/{stock_code}/refresh`: enqueue/start refresh and return task metadata (`task_id`, `status`).
+- `GET /stocks/{stock_code}/refresh-status`: query latest refresh state and stage-level observability.
 
 ## Pattern Similarity V1 Operations
 
@@ -209,7 +214,16 @@ Pattern insight endpoints:
 - `GET /stocks/{stock_code}/similar-cases`: top-k similar windows with 5d/10d/20d forward returns.
 - `GET /stocks/{stock_code}/group-stat`: aggregate stats plus return distributions.
   - `return_distribution`: backward-compatible 10d distribution.
+  - `horizon_days`: fixed horizon contract `[5, 10, 20]`.
   - `return_distributions`: keyed distributions for `5` / `10` / `20` horizons.
+
+Refresh smoke examples:
+
+```bash
+curl -s -X POST http://127.0.0.1:8000/stocks/600010/refresh | jq .
+curl -s http://127.0.0.1:8000/stocks/600010/refresh-status | jq .
+curl -s http://127.0.0.1:8000/stocks/600010/group-stat | jq '.horizon_days'
+```
 
 ## Pattern Score Calibration
 

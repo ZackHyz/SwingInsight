@@ -47,3 +47,6 @@ Direct commands commonly used:
 - Copy `.env.example` to `.env`; never commit secrets.
 - Key env vars include `TUSHARE_TOKEN` and `DATA_SOURCE_PRIORITY_*`.
 - Validate data-source fallbacks locally before merging market-data related changes.
+
+## Agent-Specific Instructions
+- Do not use MCP servers for this repository.

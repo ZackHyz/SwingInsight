@@ -4,7 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import StockResearchPage from "../src/app/stocks/[stockCode]/page";
-import type { ApiClient, StockResearchData } from "../src/lib/api";
+import type { ApiClient, StockResearchData, StockRefreshStatusData } from "../src/lib/api";
 
 function buildData(): StockResearchData {
   return {
@@ -60,6 +60,18 @@ function buildData(): StockResearchData {
   };
 }
 
+function buildRefreshStatus(status: StockRefreshStatusData["status"] = "success"): StockRefreshStatusData {
+  return {
+    stock_code: "000001",
+    status,
+    task_id: 101,
+    updated_at: "2026-04-16T12:00:00Z",
+    start_time: "2026-04-16T11:58:00Z",
+    end_time: "2026-04-16T12:00:00Z",
+    error_message: null,
+  };
+}
+
 describe("stock research page fetch", () => {
   afterEach(() => cleanup());
 
@@ -71,6 +83,7 @@ describe("stock research page fetch", () => {
       getSegmentDetail: vi.fn(),
       getSegmentLibrary: vi.fn(),
       getPrediction: vi.fn(),
+      getStockRefreshStatus: vi.fn().mockResolvedValue(buildRefreshStatus()),
     };
 
     render(<StockResearchPage stockCode="000001" apiClient={apiClient} />);
@@ -86,6 +99,7 @@ describe("stock research page fetch", () => {
     expect(screen.getByText("Instrument Context")).toBeTruthy();
     expect(screen.getByText("Chart Workspace")).toBeTruthy();
     expect(screen.getByText("Event Flow")).toBeTruthy();
+    expect(await screen.findByText(/最近刷新/)).toBeTruthy();
     expect(screen.getByTestId("research-workspace").className).toContain("terminal-grid--workspace-priority");
     expect(apiClient.getStockResearch).toHaveBeenCalledWith("000001");
   });
@@ -117,6 +131,7 @@ describe("stock research page fetch", () => {
       getSegmentDetail: vi.fn(),
       getSegmentLibrary: vi.fn(),
       getPrediction: vi.fn(),
+      getStockRefreshStatus: vi.fn().mockResolvedValue(buildRefreshStatus()),
     };
 
     render(<StockResearchPage stockCode="000001" apiClient={apiClient} />);
@@ -143,6 +158,7 @@ describe("stock research page fetch", () => {
       getSegmentDetail: vi.fn(),
       getSegmentLibrary: vi.fn(),
       getPrediction: vi.fn(),
+      getStockRefreshStatus: vi.fn().mockResolvedValue(buildRefreshStatus()),
     };
 
     render(<StockResearchPage stockCode="000001" apiClient={apiClient} />);
@@ -167,6 +183,7 @@ describe("stock research page fetch", () => {
       getSegmentDetail: vi.fn(),
       getSegmentLibrary: vi.fn(),
       getPrediction: vi.fn(),
+      getStockRefreshStatus: vi.fn().mockResolvedValue(buildRefreshStatus()),
     };
 
     render(<StockResearchPage stockCode="000001" apiClient={apiClient} />);
@@ -198,6 +215,7 @@ describe("stock research page fetch", () => {
       getSegmentDetail: vi.fn(),
       getSegmentLibrary: vi.fn(),
       getPrediction: vi.fn(),
+      getStockRefreshStatus: vi.fn().mockResolvedValue(buildRefreshStatus()),
     };
 
     render(<StockResearchPage stockCode="000001" apiClient={apiClient} />);
