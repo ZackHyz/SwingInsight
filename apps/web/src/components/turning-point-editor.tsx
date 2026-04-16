@@ -190,6 +190,7 @@ export function TurningPointEditor({ stockCode, initialData, apiClient, onCommit
         <KlineChart
           prices={initialData.prices}
           autoPoints={initialData.auto_turning_points}
+          provisionalPoints={initialData.provisional_turning_points ?? []}
           finalPoints={sortedDraftPoints}
           onSelectPrice={handleSelectPrice}
           highlightRange={
@@ -220,6 +221,21 @@ export function TurningPointEditor({ stockCode, initialData, apiClient, onCommit
             </li>
           ))}
         </ul>
+      </section>
+
+      <section className="terminal-stack">
+        <h2>候选高低点（未确认）</h2>
+        {(initialData.provisional_turning_points ?? []).length === 0 ? (
+          <p className="terminal-copy-muted">暂无候选点。</p>
+        ) : (
+          <ul className="terminal-list">
+            {(initialData.provisional_turning_points ?? []).map((point, index) => (
+              <li key={getPointKey(point, index)}>
+                {point.point_date} {point.point_type} {point.point_price}
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
 
       <TradeMarkerLayer count={initialData.trade_markers.length} />

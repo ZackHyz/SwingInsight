@@ -7,6 +7,8 @@ const MARKET_UP_STROKE = "#ffd8de";
 const MARKET_DOWN_FILL = "#31d0a0";
 const MARKET_DOWN_STROKE = "#d8fff2";
 const MANUAL_POINT_FILL = "#ffb85c";
+const PROVISIONAL_POINT_FILL = "rgba(111, 182, 255, 0.12)";
+const PROVISIONAL_POINT_STROKE = "#6fb6ff";
 
 type HighlightRange = {
   start_date: string;
@@ -18,6 +20,7 @@ type KlineChartProps = {
   mode?: "interactive" | "readonly";
   prices: PriceRow[];
   autoPoints: StockPoint[];
+  provisionalPoints?: StockPoint[];
   finalPoints: StockPoint[];
   onSelectPrice?: (row: PriceRow) => void;
   highlightRange?: HighlightRange;
@@ -85,6 +88,7 @@ export function KlineChart({
   mode = "interactive",
   prices,
   autoPoints,
+  provisionalPoints = [],
   finalPoints,
   onSelectPrice,
   highlightRange,
@@ -109,6 +113,7 @@ export function KlineChart({
   const scale = buildPriceScale(visiblePrices);
   const candleWidth = Math.max(8, Math.floor(plotWidth / Math.max(visiblePrices.length, 1) / 1.8));
   const autoPointLookup = buildPointLookup(autoPoints);
+  const provisionalPointLookup = buildPointLookup(provisionalPoints);
   const finalPointLookup = buildPointLookup(finalPoints);
   const priceTicks = [1, 0.75, 0.5, 0.25, 0].map((ratio) => scale.min + scale.span * ratio);
   const maxVolume = Math.max(...visiblePrices.map((row) => row.volume ?? 0), 1);
@@ -293,6 +298,7 @@ export function KlineChart({
           const volumeRatio = (row.volume ?? 0) / maxVolume;
           const volumeHeight = Math.max(volumeRatio * (volumeAreaHeight - 28), 2);
           const autoPoint = autoPointLookup.get(row.trade_date);
+          const provisionalPoint = provisionalPointLookup.get(row.trade_date);
           const finalPoint = finalPointLookup.get(row.trade_date);
 
           return (
@@ -342,6 +348,22 @@ export function KlineChart({
                   strokeWidth="1.5"
                 />
               )}
+              {provisionalPoint === undefined ? null : (
+                <polygon
+                  data-testid="provisional-turning-point-marker"
+                  points={buildTrianglePoints(
+                    centerX,
+                    plotPadding.top + mapPriceY(provisionalPoint.point_price, plotHeight, scale),
+                    provisionalPoint.point_type
+                  )}
+                  fill={PROVISIONAL_POINT_FILL}
+                  stroke={PROVISIONAL_POINT_STROKE}
+                  strokeWidth="1.4"
+                  strokeDasharray="3 2"
+                >
+                  <title>候选高点/低点，尚未确认反转</title>
+                </polygon>
+              )}
               <rect
                 data-testid="volume-bar"
                 x={centerX - candleWidth / 2}
@@ -386,6 +408,7 @@ export function KlineChart({
       {interactive ? (
         <div className="terminal-button-row" style={{ color: "#94a3b8" }}>
           <span>自动拐点: {autoPoints.length}</span>
+          <span>候选拐点: {provisionalPoints.length}</span>
           <span>最终拐点: {finalPoints.length}</span>
           <span>红K=上涨</span>
           <span>绿K=下跌</span>
@@ -393,6 +416,7 @@ export function KlineChart({
           <span>绿三角=系统波谷</span>
           <span>下方柱=成交量</span>
           <span>黄三角=手动标记</span>
+          <span>蓝色虚线三角=候选高点/低点，尚未确认反转</span>
           {highlightRange === undefined ? null : <span>橙色高亮=样本波段</span>}
         </div>
       ) : null}

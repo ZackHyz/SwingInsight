@@ -35,6 +35,7 @@ class StockResearchSnapshot:
     stock: StockBasic
     prices: list[DailyPrice]
     auto_points: list[TurningPoint]
+    provisional_points: list[TurningPoint]
     final_points: list[TurningPoint]
     trade_markers: list[TradeRecord]
     news_rows: list[StockResearchNewsRow]
@@ -57,6 +58,15 @@ def load_stock_research_snapshot(session: Session, stock_code: str) -> StockRese
     final_points = session.scalars(
         select(TurningPoint)
         .where(TurningPoint.stock_code == stock_code, TurningPoint.is_final.is_(True))
+        .order_by(TurningPoint.point_date.asc(), TurningPoint.id.asc())
+    ).all()
+    provisional_points = session.scalars(
+        select(TurningPoint)
+        .where(
+            TurningPoint.stock_code == stock_code,
+            TurningPoint.source_type == "system",
+            TurningPoint.is_final.is_(False),
+        )
         .order_by(TurningPoint.point_date.asc(), TurningPoint.id.asc())
     ).all()
     current_segment = session.scalar(
@@ -108,6 +118,7 @@ def load_stock_research_snapshot(session: Session, stock_code: str) -> StockRese
         stock=stock,
         prices=prices,
         auto_points=auto_points,
+        provisional_points=provisional_points,
         final_points=final_points,
         trade_markers=trade_markers,
         news_rows=news_rows,

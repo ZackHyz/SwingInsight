@@ -49,6 +49,16 @@ def test_build_stock_research_payload_formats_existing_contract(monkeypatch) -> 
                 source_type="system",
             )
         ],
+        provisional_points=[
+            SimpleNamespace(
+                id=11,
+                point_date=date(2024, 1, 10),
+                point_type="peak",
+                point_price=Decimal("10.9"),
+                source_type="system",
+                is_final=False,
+            )
+        ],
         final_points=[
             SimpleNamespace(
                 id=20,
@@ -161,6 +171,15 @@ def test_build_stock_research_payload_formats_existing_contract(monkeypatch) -> 
         }
     ]
     assert payload["auto_turning_points"][0]["source_type"] == "system"
+    assert payload["provisional_turning_points"] == [
+        {
+            "id": 11,
+            "point_date": "2024-01-10",
+            "point_type": "peak",
+            "point_price": 10.9,
+            "source_type": "system",
+        }
+    ]
     assert payload["final_turning_points"][0]["source_type"] == "manual"
     assert payload["trade_markers"][0]["trade_type"] == "buy"
 
@@ -212,6 +231,7 @@ def test_build_stock_research_payload_returns_zeroed_news_summary_without_news()
         ),
         prices=[],
         auto_points=[],
+        provisional_points=[],
         final_points=[],
         trade_markers=[],
         news_rows=[],

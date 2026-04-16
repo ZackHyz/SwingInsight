@@ -117,6 +117,16 @@ def build_stock_research_payload(snapshot: StockResearchSnapshot) -> dict[str, o
             }
             for row in snapshot.auto_points
         ],
+        "provisional_turning_points": [
+            {
+                "id": row.id,
+                "point_date": row.point_date.isoformat(),
+                "point_type": row.point_type,
+                "point_price": float(row.point_price),
+                "source_type": row.source_type,
+            }
+            for row in snapshot.provisional_points
+        ],
         "final_turning_points": [
             {
                 "id": row.id,

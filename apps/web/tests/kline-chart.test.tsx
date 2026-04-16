@@ -19,6 +19,7 @@ describe("kline chart", () => {
           { trade_date: "2025-04-02", open_price: 5.1, high_price: 5.6, low_price: 5.0, close_price: 5.5, volume: 140000 },
         ]}
         autoPoints={[{ point_date: "2025-04-01", point_type: "peak", point_price: 5.5, source_type: "system" }]}
+        provisionalPoints={[{ point_date: "2025-03-31", point_type: "trough", point_price: 4.9, source_type: "system" }]}
         finalPoints={[{ point_date: "2025-04-02", point_type: "peak", point_price: 5.6, source_type: "manual" }]}
         onSelectPrice={onSelectPrice}
       />
@@ -42,6 +43,10 @@ describe("kline chart", () => {
     expect(markers[0].getAttribute("fill")).toBe("#ff6a7a");
     expect(markers[1].tagName.toLowerCase()).toBe("polygon");
     expect(markers[1].getAttribute("fill")).toBe("#ffb85c");
+    const provisionalMarkers = screen.getAllByTestId("provisional-turning-point-marker");
+    expect(provisionalMarkers).toHaveLength(1);
+    expect(provisionalMarkers[0].getAttribute("fill")).toBe("rgba(111, 182, 255, 0.12)");
+    expect(screen.getByText("候选高点/低点，尚未确认反转")).toBeTruthy();
 
     fireEvent.click(screen.getByTestId("kline-canvas"), { clientX: 460, clientY: 100 });
     expect(onSelectPrice).toHaveBeenCalledTimes(1);

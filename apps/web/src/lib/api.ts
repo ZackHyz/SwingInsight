@@ -78,6 +78,7 @@ export type StockResearchData = {
   };
   prices: PriceRow[];
   auto_turning_points: StockPoint[];
+  provisional_turning_points?: StockPoint[];
   final_turning_points: StockPoint[];
   trade_markers: Array<{
     id?: number;
