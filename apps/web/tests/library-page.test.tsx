@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import LibraryPage from "../src/app/library/page";
-import type { SegmentLibraryData } from "../src/lib/api";
+import type { ApiClient, SegmentLibraryData } from "../src/lib/api";
 
 function buildData(): SegmentLibraryData {
   return {
@@ -31,6 +31,21 @@ function buildData(): SegmentLibraryData {
 
 describe("library page", () => {
   afterEach(() => cleanup());
+
+  it("loads rows when initial data is absent", async () => {
+    const data = buildData();
+    const getSegmentLibrary = vi.fn(async () => data);
+    const client = {
+      getSegmentLibrary,
+    } satisfies Partial<ApiClient>;
+
+    render(<LibraryPage apiClient={client as ApiClient} />);
+
+    expect(screen.getByText("形态库总览")).toBeTruthy();
+    await waitFor(() => expect(getSegmentLibrary).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText("000001")).toBeTruthy();
+    expect(screen.getByText("000002")).toBeTruthy();
+  });
 
   it("filters rows by stock code and label", () => {
     render(<LibraryPage initialData={buildData()} />);
