@@ -130,7 +130,11 @@ class WatchlistRefreshService:
 
 
 def _serialize_datetime(value):
-    return value.isoformat() if value is not None else None
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=UTC)
+    return value.isoformat()
 
 
 def _utcnow():

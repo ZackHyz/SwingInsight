@@ -440,7 +440,11 @@ def _duration_ms(start_time: datetime, end_time: datetime) -> int:
 
 
 def _serialize_datetime(value: datetime | None) -> str | None:
-    return value.isoformat() if value is not None else None
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=UTC)
+    return value.isoformat()
 
 
 def _utcnow() -> datetime:

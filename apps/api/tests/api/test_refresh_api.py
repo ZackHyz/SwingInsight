@@ -122,8 +122,8 @@ def test_get_refresh_status_returns_latest_task_payload() -> None:
     assert payload["stock_code"] == "600010"
     assert payload["status"] == "success"
     assert payload["created_at"]
-    assert payload["start_time"] == "2026-04-16T09:00:00"
-    assert payload["end_time"] == "2026-04-16T09:05:00"
+    assert payload["start_time"] == "2026-04-16T09:00:00+00:00"
+    assert payload["end_time"] == "2026-04-16T09:05:00+00:00"
     assert payload["error_message"] is None
     assert payload["stages"] == [
         {
@@ -131,8 +131,8 @@ def test_get_refresh_status_returns_latest_task_payload() -> None:
             "status": "success",
             "source": "akshare",
             "rows_changed": 3,
-            "start_time": "2026-04-16T09:00:00",
-            "end_time": "2026-04-16T09:01:00",
+            "start_time": "2026-04-16T09:00:00+00:00",
+            "end_time": "2026-04-16T09:01:00+00:00",
             "duration_ms": 60000,
             "error_message": None,
         }
