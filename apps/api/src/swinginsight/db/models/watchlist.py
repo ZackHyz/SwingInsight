@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
-from sqlalchemy import Date, DateTime, Index, Integer, Numeric, String, UniqueConstraint
+from sqlalchemy import Date, DateTime, Index, Integer, Numeric, String, Text, UniqueConstraint, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from swinginsight.db.base import BIGINT_TYPE, Base, CreatedAtMixin
@@ -28,3 +28,26 @@ class MarketScanResult(CreatedAtMixin, Base):
     event_density: Mapped[float] = mapped_column(Numeric(8, 4), nullable=False, default=0)
     latest_refresh_at: Mapped[datetime | None] = mapped_column(DateTime())
     source_version: Mapped[str | None] = mapped_column(String(64))
+
+
+class WatchlistRefreshTask(CreatedAtMixin, Base):
+    __tablename__ = "watchlist_refresh_task"
+    __table_args__ = (
+        Index("ix_watchlist_refresh_task_status_start_time", "status", "start_time"),
+        Index(
+            "uq_watchlist_refresh_task_inflight_scope_key",
+            "scope_key",
+            unique=True,
+            sqlite_where=text("status IN ('queued', 'running')"),
+            postgresql_where=text("status IN ('queued', 'running')"),
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(BIGINT_TYPE, primary_key=True, autoincrement=True)
+    scope_key: Mapped[str] = mapped_column(String(16), nullable=False, default="global")
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    scan_date: Mapped[date | None] = mapped_column(Date())
+    row_count: Mapped[int | None] = mapped_column(Integer())
+    start_time: Mapped[datetime | None] = mapped_column(DateTime())
+    end_time: Mapped[datetime | None] = mapped_column(DateTime())
+    error_message: Mapped[str | None] = mapped_column(Text())

@@ -56,22 +56,23 @@ def test_segment_uid_length_supports_algorithm_version_suffix() -> None:
     assert SwingSegment.__table__.c.segment_uid.type.length >= 128
 
 
-def test_alembic_upgrade_from_0008_creates_market_scan_result_table(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_alembic_upgrade_from_0009_creates_watchlist_refresh_task_table(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     database_path = tmp_path / "watchlist-upgrade.db"
     database_url = f"sqlite:///{database_path}"
     alembic_cfg = Config(str(Path(__file__).resolve().parents[2] / "alembic.ini"))
     alembic_cfg.set_main_option("sqlalchemy.url", database_url)
     monkeypatch.setenv("DATABASE_URL", database_url)
 
-    command.upgrade(alembic_cfg, "0008_refresh_task")
+    command.upgrade(alembic_cfg, "0009_market_scan_result")
     engine = create_engine(database_url, future=True)
     with engine.connect() as connection:
-        assert "market_scan_result" not in inspect(connection).get_table_names()
+        assert "watchlist_refresh_task" not in inspect(connection).get_table_names()
 
     command.upgrade(alembic_cfg, "head")
     with engine.connect() as connection:
         inspector = inspect(connection)
         assert "market_scan_result" in inspector.get_table_names()
+        assert "watchlist_refresh_task" in inspector.get_table_names()
         indexes = {index["name"] for index in inspector.get_indexes("market_scan_result")}
         assert "ix_market_scan_result_scan_date_rank_no" in indexes
         assert "ix_market_scan_result_stock_code_scan_date" in indexes
@@ -81,3 +82,7 @@ def test_alembic_upgrade_from_0008_creates_market_scan_result_table(tmp_path: Pa
         assert {"scan_date", "stock_code", "rank_no", "rank_score", "pattern_score", "confidence"} <= columns
         count = connection.execute(text("SELECT COUNT(*) FROM market_scan_result")).scalar_one()
         assert count == 0
+        watchlist_indexes = {index["name"] for index in inspector.get_indexes("watchlist_refresh_task")}
+        assert "ix_watchlist_refresh_task_status_start_time" in watchlist_indexes
+        watchlist_columns = {item["name"] for item in inspector.get_columns("watchlist_refresh_task")}
+        assert {"scope_key", "status", "scan_date", "row_count"} <= watchlist_columns

@@ -13,7 +13,7 @@ from swinginsight.db.models.prediction import BacktestResult, PredictionResult, 
 from swinginsight.db.models.segment import SegmentFeature, SegmentLabel, SwingSegment
 from swinginsight.db.models.stock import StockBasic
 from swinginsight.db.models.turning_point import PointRevisionLog, TurningPoint
-from swinginsight.db.models.watchlist import MarketScanResult
+from swinginsight.db.models.watchlist import MarketScanResult, WatchlistRefreshTask
 
 __all__ = [
     "AlgoVersion",
@@ -42,4 +42,5 @@ __all__ = [
     "TradeRecord",
     "TurningPoint",
     "MarketScanResult",
+    "WatchlistRefreshTask",
 ]

@@ -11,7 +11,7 @@ type WatchlistRefreshState = {
 const ACTIVE_WATCHLIST_REFRESH_STATUSES = new Set<WatchlistRefreshTaskData["status"]>(["queued", "running"]);
 
 export function useWatchlistRefreshStatus(
-  enabled: boolean,
+  requestVersion: number,
   apiClient: Pick<ApiClient, "getWatchlistRefreshStatus">,
 ): WatchlistRefreshState {
   const [data, setData] = useState<WatchlistRefreshTaskData | null>(null);
@@ -20,7 +20,7 @@ export function useWatchlistRefreshStatus(
 
   useEffect(() => {
     const loadStatus = apiClient.getWatchlistRefreshStatus;
-    if (!enabled || loadStatus === undefined) {
+    if (loadStatus === undefined) {
       setData(null);
       setLoading(false);
       setError(null);
@@ -64,7 +64,7 @@ export function useWatchlistRefreshStatus(
         clearTimeout(timer);
       }
     };
-  }, [apiClient, enabled]);
+  }, [apiClient, requestVersion]);
 
   return { data, loading, error };
 }
