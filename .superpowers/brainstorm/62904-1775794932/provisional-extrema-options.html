@@ -1,0 +1,112 @@
+<h2>研究页里的“候选高点 / 候选低点”怎么呈现？</h2>
+<p class="subtitle">这些点还没被反向确认，不应与已确认 turning points 混成同一层语义。选一个你更想要的强调强度。</p>
+
+<div class="cards">
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="mockup">
+        <div class="mockup-header">A. 轻提示</div>
+        <div class="mockup-body" style="padding:16px">
+          <div style="height:140px;border:1px solid #d6d0c4;border-radius:14px;background:#fffaf1;position:relative;overflow:hidden">
+            <div style="position:absolute;left:20px;right:20px;top:84px;height:2px;background:#e7dcc7"></div>
+            <div style="position:absolute;left:28px;bottom:34px;width:18px;height:52px;background:#ef4444;border:2px solid #b91c1c;border-radius:3px"></div>
+            <div style="position:absolute;left:72px;bottom:46px;width:18px;height:44px;background:#22c55e;border:2px solid #15803d;border-radius:3px"></div>
+            <div style="position:absolute;left:116px;bottom:54px;width:18px;height:34px;background:#ef4444;border:2px solid #b91c1c;border-radius:3px"></div>
+            <div style="position:absolute;left:160px;bottom:64px;width:18px;height:26px;background:#ef4444;border:2px solid #b91c1c;border-radius:3px"></div>
+            <div style="position:absolute;left:76px;bottom:94px;width:0;height:0;border-left:9px solid transparent;border-right:9px solid transparent;border-top:14px solid #2563eb"></div>
+            <div style="position:absolute;left:160px;bottom:98px;width:0;height:0;border-left:10px solid transparent;border-right:10px solid transparent;border-top:16px solid transparent;filter:drop-shadow(0 0 0 #f59e0b)">
+              <div style="position:absolute;left:-10px;top:-2px;width:0;height:0;border-left:10px solid transparent;border-right:10px solid transparent;border-top:16px solid transparent;border-bottom:none"></div>
+            </div>
+            <div style="position:absolute;left:160px;bottom:98px;width:0;height:0;border-left:10px solid transparent;border-right:10px solid transparent;border-top:16px solid #fffaf1"></div>
+            <div style="position:absolute;left:156px;bottom:113px;font-size:10px;color:#b45309;font-weight:700">候选</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>只在图上轻量提示</h3>
+      <p>保留当前图表主视觉，只把最新未确认点改为空心 / 虚线标记，避免用户误读成已确认转折。</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="mockup">
+        <div class="mockup-header">B. 平衡型</div>
+        <div class="mockup-body" style="padding:16px">
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <div style="padding:10px 12px;border-radius:12px;background:#fff3d6;border:1px solid #f2c66d;color:#92400e;font-weight:700;font-size:13px">
+              当前未确认结构: 候选顶部 4.86
+            </div>
+            <div style="height:118px;border:1px solid #d6d0c4;border-radius:14px;background:#fffaf1;position:relative;overflow:hidden">
+              <div style="position:absolute;left:20px;right:20px;top:72px;height:2px;background:#e7dcc7"></div>
+              <div style="position:absolute;left:26px;bottom:28px;width:18px;height:46px;background:#ef4444;border:2px solid #b91c1c;border-radius:3px"></div>
+              <div style="position:absolute;left:68px;bottom:40px;width:18px;height:40px;background:#22c55e;border:2px solid #15803d;border-radius:3px"></div>
+              <div style="position:absolute;left:110px;bottom:54px;width:18px;height:28px;background:#ef4444;border:2px solid #b91c1c;border-radius:3px"></div>
+              <div style="position:absolute;left:152px;bottom:61px;width:18px;height:24px;background:#ef4444;border:2px solid #b91c1c;border-radius:3px"></div>
+              <div style="position:absolute;left:72px;bottom:84px;width:0;height:0;border-left:9px solid transparent;border-right:9px solid transparent;border-top:14px solid #2563eb"></div>
+              <div style="position:absolute;left:121px;bottom:34px;width:48px;border-top:2px dashed #f59e0b;transform:rotate(-24deg);transform-origin:left center"></div>
+              <div style="position:absolute;left:152px;bottom:90px;width:0;height:0;border-left:10px solid transparent;border-right:10px solid transparent;border-top:16px solid #fffaf1;outline:2px dashed #f59e0b"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>图表 + 状态条双提示</h3>
+      <p>图上保留候选点，同时在图表上方加一条“当前未确认结构”状态条。能解释语义，但不会把页面做得太重。</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="mockup">
+        <div class="mockup-header">C. 强提示</div>
+        <div class="mockup-body" style="padding:16px">
+          <div style="display:flex;gap:12px;align-items:stretch">
+            <div style="flex:1;height:126px;border:1px solid #d6d0c4;border-radius:14px;background:#fffaf1;position:relative;overflow:hidden">
+              <div style="position:absolute;right:0;top:0;bottom:0;width:44px;background:rgba(245,158,11,0.16)"></div>
+              <div style="position:absolute;left:20px;right:20px;top:74px;height:2px;background:#e7dcc7"></div>
+              <div style="position:absolute;left:26px;bottom:32px;width:18px;height:44px;background:#ef4444;border:2px solid #b91c1c;border-radius:3px"></div>
+              <div style="position:absolute;left:68px;bottom:42px;width:18px;height:38px;background:#22c55e;border:2px solid #15803d;border-radius:3px"></div>
+              <div style="position:absolute;left:110px;bottom:54px;width:18px;height:28px;background:#ef4444;border:2px solid #b91c1c;border-radius:3px"></div>
+              <div style="position:absolute;left:152px;bottom:61px;width:18px;height:24px;background:#ef4444;border:2px solid #b91c1c;border-radius:3px"></div>
+              <div style="position:absolute;left:72px;bottom:84px;width:0;height:0;border-left:9px solid transparent;border-right:9px solid transparent;border-top:14px solid #2563eb"></div>
+              <div style="position:absolute;left:152px;bottom:92px;width:0;height:0;border-left:10px solid transparent;border-right:10px solid transparent;border-top:16px solid #fffaf1;outline:2px dashed #f59e0b"></div>
+            </div>
+            <div style="width:120px;padding:10px;border-radius:12px;background:#fff7e7;border:1px solid #f2c66d">
+              <div class="label">ACTIVE LEG</div>
+              <div style="font-weight:800;color:#92400e;margin-top:4px">候选顶部</div>
+              <div style="font-size:12px;color:#7c2d12;margin-top:8px">未确认</div>
+              <div style="font-size:12px;color:#7c2d12">等待反向验证</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>把“进行中的腿”单独拉出来</h3>
+      <p>不仅改 marker，还用高亮区和侧边说明把当前候选结构单独表达。信息最充分，但页面会更像分析终端。</p>
+    </div>
+  </div>
+</div>
+
+<div class="section" style="margin-top:20px">
+  <div class="pros-cons">
+    <div class="pros">
+      <h4>共同目标</h4>
+      <ul>
+        <li>已确认点继续保持现有实心标记</li>
+        <li>候选点只表达“可能形成”，不冒充最终结论</li>
+        <li>默认只展示最新一组候选高点或候选低点</li>
+      </ul>
+    </div>
+    <div class="cons">
+      <h4>我要确认的偏好</h4>
+      <ul>
+        <li>你要更偏“轻量提醒”还是“强分析信号”</li>
+        <li>候选结构是否需要在图外再给一句文字解释</li>
+      </ul>
+    </div>
+  </div>
+</div>
