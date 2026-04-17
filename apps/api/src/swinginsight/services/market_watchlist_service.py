@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from swinginsight.db.models.market_data import DailyPrice
 from swinginsight.db.models.news import NewsRaw
 from swinginsight.db.models.prediction import PredictionResult
+from swinginsight.db.models.refresh import StockRefreshTask
 from swinginsight.db.models.stock import StockBasic
 from swinginsight.db.models.watchlist import MarketScanResult
 from swinginsight.services.stock_refresh_service import StockRefreshService
@@ -36,7 +37,14 @@ class MarketWatchlistService:
             sample_count = len(prediction.similarity_topn_json or [])
             event_density = self._resolve_event_density(stock.stock_code, scan_date=resolved_scan_date)
             latest_refresh_at = self.session.scalar(
-                select(func.max(DailyPrice.trade_date)).where(DailyPrice.stock_code == stock.stock_code)
+                select(StockRefreshTask.end_time)
+                .where(
+                    StockRefreshTask.stock_code == stock.stock_code,
+                    StockRefreshTask.status == "success",
+                    StockRefreshTask.end_time.is_not(None),
+                )
+                .order_by(StockRefreshTask.end_time.desc(), StockRefreshTask.id.desc())
+                .limit(1)
             )
             rank_score = self._rank_score(
                 pattern_score=pattern_score,
@@ -52,7 +60,7 @@ class MarketWatchlistService:
                     "confidence": confidence,
                     "sample_count": sample_count,
                     "event_density": event_density,
-                    "latest_refresh_at": datetime.combine(latest_refresh_at, datetime.min.time()) if latest_refresh_at else None,
+                    "latest_refresh_at": latest_refresh_at,
                     "rank_score": rank_score,
                     "source_version": prediction.model_version,
                 }
@@ -113,7 +121,7 @@ class MarketWatchlistService:
                     "confidence": float(row.confidence),
                     "sample_count": row.sample_count,
                     "event_density": float(row.event_density),
-                    "latest_refresh_at": row.latest_refresh_at.isoformat() if row.latest_refresh_at is not None else None,
+                    "latest_refresh_at": _serialize_datetime(row.latest_refresh_at),
                 }
                 for row in rows
             ],
@@ -143,3 +151,11 @@ class MarketWatchlistService:
         event_component = min(event_density / 0.3, 1.0)
         score = pattern_score * 0.5 + confidence * 0.25 + sample_component * 0.15 + event_component * 0.1
         return round(score, 4)
+
+
+def _serialize_datetime(value: datetime | None) -> str | None:
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=UTC)
+    return value.isoformat()

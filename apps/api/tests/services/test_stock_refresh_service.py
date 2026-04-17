@@ -494,5 +494,5 @@ def test_rerun_after_partial_resets_attempt_times_and_clears_old_stage_logs(monk
     assert all(log.start_time >= datetime(2026, 4, 16, 11, 0, 1) for log in second_stage_logs)
     assert latest_status is not None
     assert latest_status["status"] == "success"
-    assert latest_status["start_time"] == "2026-04-16T11:00:00"
+    assert latest_status["start_time"] == "2026-04-16T11:00:00+00:00"
     assert len(latest_status["stages"]) == 6

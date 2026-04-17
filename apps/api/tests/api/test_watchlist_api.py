@@ -36,6 +36,7 @@ def test_watchlist_endpoint_returns_latest_scan_rows() -> None:
     from swinginsight.db.models.market_data import DailyPrice
     from swinginsight.db.models.news import NewsRaw
     from swinginsight.db.models.prediction import PredictionResult
+    from swinginsight.db.models.refresh import StockRefreshTask
     from swinginsight.db.models.stock import StockBasic
 
     session.add_all(
@@ -115,6 +116,14 @@ def test_watchlist_endpoint_returns_latest_scan_rows() -> None:
                 data_source="test",
             )
         )
+    session.add(
+        StockRefreshTask(
+            stock_code="000001",
+            status="success",
+            start_time=datetime(2026, 4, 16, 9, 0, 0),
+            end_time=datetime(2026, 4, 16, 9, 5, 0),
+        )
+    )
     MarketWatchlistService(session).run_scan(scan_date=date(2026, 4, 16))
     session.commit()
     session.close()
@@ -130,6 +139,7 @@ def test_watchlist_endpoint_returns_latest_scan_rows() -> None:
     assert payload["rows"]
     assert payload["rows"][0]["stock_code"] == "000001"
     assert payload["rows"][0]["rank_no"] == 1
+    assert payload["rows"][0]["latest_refresh_at"] == "2026-04-16T09:05:00+00:00"
 
 
 def test_watchlist_refresh_endpoint_rebuilds_latest_rows(monkeypatch) -> None:

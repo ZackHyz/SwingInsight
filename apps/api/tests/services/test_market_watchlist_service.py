@@ -111,10 +111,28 @@ def seed_scan_inputs(session) -> None:
 
 def test_run_market_scan_persists_ranked_watchlist_rows() -> None:
     from swinginsight.db.models.watchlist import MarketScanResult
+    from swinginsight.db.models.refresh import StockRefreshTask
     from swinginsight.services.market_watchlist_service import MarketWatchlistService
 
     session = build_session()
     seed_scan_inputs(session)
+    session.add_all(
+        [
+            StockRefreshTask(
+                stock_code="000001",
+                status="success",
+                start_time=datetime(2026, 4, 16, 9, 0, 0),
+                end_time=datetime(2026, 4, 16, 9, 5, 0),
+            ),
+            StockRefreshTask(
+                stock_code="600157",
+                status="success",
+                start_time=datetime(2026, 4, 16, 9, 10, 0),
+                end_time=datetime(2026, 4, 16, 9, 15, 0),
+            ),
+        ]
+    )
+    session.commit()
 
     summary = MarketWatchlistService(session).run_scan(scan_date=date(2026, 4, 16))
 
@@ -127,3 +145,4 @@ def test_run_market_scan_persists_ranked_watchlist_rows() -> None:
     assert rows[0].stock_code == "000001"
     assert rows[0].rank_no == 1
     assert rows[0].sample_count >= rows[1].sample_count
+    assert rows[0].latest_refresh_at == datetime(2026, 4, 16, 9, 5, 0)
