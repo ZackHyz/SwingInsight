@@ -11,11 +11,11 @@ describe("smoke", () => {
   it("renders the terminal landing shell", () => {
     render(<HomePage />);
 
-    expect(screen.getByRole("heading", { level: 1, name: "SwingInsight Terminal" })).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Overview" })).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Research" })).toBeTruthy();
-    expect(screen.getByRole("navigation", { name: "Main navigation" }).className).toContain("app-shell__top-nav");
+    expect(screen.getByRole("heading", { level: 1, name: "SwingInsight 终端" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "总览" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "研究台" })).toBeTruthy();
+    expect(screen.getByRole("navigation", { name: "主导航" }).className).toContain("app-shell__top-nav");
     expect(screen.queryByLabelText("Primary")).toBeNull();
-    expect(screen.getByText("Turning Point Editing")).toBeTruthy();
+    expect(screen.getByText("拐点编辑")).toBeTruthy();
   });
 });

@@ -536,6 +536,7 @@ class PredictionService:
                 PredictionResult.model_version == PREDICTION_VERSION,
             )
         )
+        self.session.flush()
         self.session.add(
             PredictionResult(
                 stock_code=stock_code,

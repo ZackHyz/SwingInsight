@@ -64,16 +64,16 @@ export default function WatchlistPage({ initialData, apiClient: client }: Watchl
   return (
     <AppShell
       currentPath="/watchlist"
-      title="Ranked Watchlist"
-      subtitle="Nightly market scan output ranked by pattern score, confidence, sample support, and event density."
+      title="分级观察池"
+      subtitle="汇总夜间市场扫描结果，按形态得分、置信度、样本支撑和事件密度排序。"
       topBarContent={
         <>
-          <StatusPill label={`Scan ${scanDate ?? "--"}`} />
-          <StatusPill label={`Rows ${rows.length}`} tone={rows.length > 0 ? "success" : "default"} />
+          <StatusPill label={`扫描日 ${scanDate ?? "--"}`} />
+          <StatusPill label={`候选数 ${rows.length}`} tone={rows.length > 0 ? "success" : "default"} />
         </>
       }
     >
-      <TerminalPanel title="Scan Summary" eyebrow="Nightly Scan">
+      <TerminalPanel title="扫描摘要" eyebrow="夜间扫描">
         {isLoading ? (
           <p className="terminal-copy">正在加载夜间扫描结果...</p>
         ) : loadError !== null ? (
@@ -83,22 +83,22 @@ export default function WatchlistPage({ initialData, apiClient: client }: Watchl
         ) : (
           <div className="terminal-inline-metrics">
             <div className="metric-card">
-              <p className="metric-card__eyebrow">Top Candidate</p>
+              <p className="metric-card__eyebrow">榜首标的</p>
               <p className="metric-card__value">{topRow.stock_code}</p>
             </div>
             <div className="metric-card">
-              <p className="metric-card__eyebrow">Pattern Score</p>
+              <p className="metric-card__eyebrow">形态得分</p>
               <p className={`metric-card__value ${getMarketValueClass(topRow.pattern_score - 0.5)}`}>{formatPercent(topRow.pattern_score)}</p>
             </div>
             <div className="metric-card">
-              <p className="metric-card__eyebrow">Confidence</p>
+              <p className="metric-card__eyebrow">置信度</p>
               <p className="metric-card__value">{formatPercent(topRow.confidence)}</p>
             </div>
           </div>
         )}
       </TerminalPanel>
 
-      <TerminalPanel title="Leaderboard" eyebrow="Market Candidates">
+      <TerminalPanel title="候选榜单" eyebrow="市场候选">
         {isLoading ? (
           <p className="terminal-copy">候选池同步中...</p>
         ) : loadError !== null ? (
@@ -109,12 +109,12 @@ export default function WatchlistPage({ initialData, apiClient: client }: Watchl
           <table className="terminal-table">
             <thead>
               <tr>
-                <th>Rank</th>
-                <th>Stock</th>
-                <th>Pattern</th>
-                <th>Confidence</th>
-                <th>Sample</th>
-                <th>Event Density</th>
+                <th>排名</th>
+                <th>股票</th>
+                <th>形态</th>
+                <th>置信度</th>
+                <th>样本数</th>
+                <th>事件密度</th>
               </tr>
             </thead>
             <tbody>

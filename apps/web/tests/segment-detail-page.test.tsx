@@ -67,8 +67,8 @@ describe("segment detail page", () => {
       />
     );
 
-    expect(screen.getByRole("link", { name: "Pattern Library" })).toBeTruthy();
-    expect(screen.getByText("Segment Drill-Down")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "形态库" })).toBeTruthy();
+    expect(screen.getByText("波段拆解")).toBeTruthy();
     expect(screen.getByText("000001 波段详情")).toBeTruthy();
     expect(screen.getByText("20.45%")).toBeTruthy();
     expect(screen.getByText("Bank support policy")).toBeTruthy();

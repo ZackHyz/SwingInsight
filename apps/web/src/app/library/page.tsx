@@ -43,34 +43,34 @@ export default function LibraryPage({ initialData }: LibraryPageProps) {
   return (
     <AppShell
       currentPath="/library"
-      title="Pattern Library"
-      subtitle="Search historical segments, scan labels, and drill into candidates without leaving the terminal shell."
+      title="形态库"
+      subtitle="检索历史波段、筛选标签，并在同一终端壳层里继续下钻候选样本。"
       topBarContent={
         <>
-          <StatusPill label={`Rows ${rows.length}`} />
-          <StatusPill label={`Active Filters ${activeFilterCount}`} tone={activeFilterCount > 0 ? "warning" : "default"} />
+          <StatusPill label={`结果 ${rows.length}`} />
+          <StatusPill label={`筛选 ${activeFilterCount}`} tone={activeFilterCount > 0 ? "warning" : "default"} />
         </>
       }
     >
-      <TerminalPanel title="Result Summary" eyebrow="Library Overview">
+      <TerminalPanel title="结果概览" eyebrow="形态库总览">
         <div className="terminal-inline-metrics">
           <div className="metric-card">
-            <p className="metric-card__eyebrow">Visible Rows</p>
+            <p className="metric-card__eyebrow">当前可见</p>
             <p className="metric-card__value">{rows.length}</p>
           </div>
           <div className="metric-card">
-            <p className="metric-card__eyebrow">Total Rows</p>
+            <p className="metric-card__eyebrow">总样本数</p>
             <p className="metric-card__value">{data.rows.length}</p>
           </div>
           <div className="metric-card">
-            <p className="metric-card__eyebrow">Active Filters</p>
+            <p className="metric-card__eyebrow">已启用筛选</p>
             <p className="metric-card__value">{activeFilterCount}</p>
           </div>
         </div>
       </TerminalPanel>
 
       <section className="terminal-grid terminal-grid--split">
-        <TerminalPanel title="Filter Stack" eyebrow="Search Controls">
+        <TerminalPanel title="筛选条件" eyebrow="检索控制">
           <SegmentFilterBar
             stockCode={stockCode}
             segmentType={segmentType}
@@ -81,7 +81,7 @@ export default function LibraryPage({ initialData }: LibraryPageProps) {
           />
         </TerminalPanel>
 
-        <TerminalPanel title="Pattern Grid" eyebrow="Analysis View">
+        <TerminalPanel title="形态表格" eyebrow="分析视图">
           <SegmentTable rows={rows} />
         </TerminalPanel>
       </section>

@@ -5,7 +5,7 @@ from contextlib import contextmanager
 
 from datetime import date
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException
 from sqlalchemy.orm import Session
 
 from swinginsight.api.routes.news import get_segment_news_payload, get_turning_point_news_payload
@@ -20,14 +20,16 @@ from swinginsight.api.routes.stocks import (
 )
 from swinginsight.api.routes.turning_points import commit_turning_points
 from swinginsight.api.routes.watchlist import get_watchlist_payload
-from swinginsight.db.session import session_scope
+from swinginsight.db.session import get_session_factory as get_default_session_factory, session_scope
 from swinginsight.services.feature_materialization_service import get_segment_library_rows
 from swinginsight.services.score_validation_service import ScoreValidationService
+from swinginsight.services.stock_refresh_service import StockRefreshService
 from swinginsight.api.schemas.turning_points import StockResearchResponse, TurningPointCommitRequest
 
 
 def create_app(session_factory: Callable[[], Session] | None = None) -> FastAPI:
     app = FastAPI(title="SwingInsight API")
+    task_session_factory = session_factory or get_default_session_factory()
 
     @contextmanager
     def default_session_factory() -> Iterator[Session]:
@@ -41,6 +43,13 @@ def create_app(session_factory: Callable[[], Session] | None = None) -> FastAPI:
         with default_session_factory() as session:
             yield session
 
+    def run_refresh_task(task_id: int) -> None:
+        session = task_session_factory()
+        try:
+            StockRefreshService(session).run(task_id)
+        finally:
+            session.close()
+
     @app.get("/stocks/{stock_code}", response_model=StockResearchResponse)
     def get_stock(stock_code: str, session: Session = Depends(get_session)) -> dict[str, object]:
         payload = get_stock_research_payload(session=session, stock_code=stock_code)
@@ -49,8 +58,15 @@ def create_app(session_factory: Callable[[], Session] | None = None) -> FastAPI:
         return payload
 
     @app.post("/stocks/{stock_code}/refresh")
-    def post_stock_refresh(stock_code: str, session: Session = Depends(get_session)) -> dict[str, object]:
-        return enqueue_stock_refresh(session=session, stock_code=stock_code)
+    def post_stock_refresh(
+        stock_code: str,
+        background_tasks: BackgroundTasks,
+        session: Session = Depends(get_session),
+    ) -> dict[str, object]:
+        payload = enqueue_stock_refresh(session=session, stock_code=stock_code)
+        if payload["status"] == "queued":
+            background_tasks.add_task(run_refresh_task, int(payload["task_id"]))
+        return payload
 
     @app.get("/stocks/{stock_code}/refresh-status")
     def get_refresh_status(stock_code: str, session: Session = Depends(get_session)) -> dict[str, object]:

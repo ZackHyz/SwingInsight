@@ -78,6 +78,11 @@ describe("stock research page fetch", () => {
   it("loads stock research data when initial data is absent", async () => {
     const apiClient: ApiClient = {
       getStockResearch: vi.fn().mockResolvedValue(buildData()),
+      startStockRefresh: vi.fn().mockResolvedValue({
+        task_id: 101,
+        stock_code: "000001",
+        status: "queued",
+      }),
       commitTurningPoints: vi.fn(),
       getSegmentChartWindow: vi.fn(),
       getSegmentDetail: vi.fn(),
@@ -93,15 +98,16 @@ describe("stock research page fetch", () => {
     await waitFor(() => {
       expect(screen.getByText("Ping An Bank (000001)")).toBeTruthy();
     });
-    expect(screen.getByRole("link", { name: "Research" })).toBeTruthy();
-    expect(screen.getByRole("navigation", { name: "Main navigation" }).className).toContain("app-shell__top-nav");
+    expect(screen.getByRole("link", { name: "研究台" })).toBeTruthy();
+    expect(screen.getByRole("navigation", { name: "主导航" }).className).toContain("app-shell__top-nav");
     expect(screen.queryByLabelText("Primary")).toBeNull();
-    expect(screen.getByText("Instrument Context")).toBeTruthy();
-    expect(screen.getByText("Chart Workspace")).toBeTruthy();
-    expect(screen.getByText("Event Flow")).toBeTruthy();
+    expect(screen.getByText("标的上下文")).toBeTruthy();
+    expect(screen.getByText("图表工作台")).toBeTruthy();
+    expect(screen.getByText("事件流")).toBeTruthy();
     expect(await screen.findByText(/最近刷新/)).toBeTruthy();
     expect(screen.getByTestId("research-workspace").className).toContain("terminal-grid--workspace-priority");
     expect(apiClient.getStockResearch).toHaveBeenCalledWith("000001");
+    expect(apiClient.startStockRefresh).toHaveBeenCalledWith("000001");
   });
 
   it("searches by stock code and reloads the page data", async () => {

@@ -35,9 +35,9 @@ describe("library page", () => {
   it("filters rows by stock code and label", () => {
     render(<LibraryPage initialData={buildData()} />);
 
-    expect(screen.getByRole("link", { name: "Pattern Library" })).toBeTruthy();
-    expect(screen.getByText("Result Summary")).toBeTruthy();
-    expect(screen.getByText("Filter Stack")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "形态库" })).toBeTruthy();
+    expect(screen.getByText("结果概览")).toBeTruthy();
+    expect(screen.getByText("筛选条件")).toBeTruthy();
     expect(screen.getByText("000001")).toBeTruthy();
     expect(screen.getByText("000002")).toBeTruthy();
 

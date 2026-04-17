@@ -40,9 +40,9 @@ describe("watchlist page", () => {
   it("renders leaderboard rows and links to research page", () => {
     render(<WatchlistPage initialData={buildData()} />);
 
-    expect(screen.getByRole("link", { name: "Watchlist" })).toBeTruthy();
-    expect(screen.getByText("Ranked Watchlist")).toBeTruthy();
-    expect(screen.getByText("Leaderboard")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "观察池" })).toBeTruthy();
+    expect(screen.getByText("分级观察池")).toBeTruthy();
+    expect(screen.getByText("候选榜单")).toBeTruthy();
     expect(screen.getByRole("link", { name: "000001" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "600157" })).toBeTruthy();
     expect(screen.getByText("· Ping An Bank")).toBeTruthy();

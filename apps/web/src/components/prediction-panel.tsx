@@ -186,7 +186,7 @@ export function PredictionPanel({ apiClient, stockCode, prices, autoPoints, prov
     <aside className="terminal-panel">
       <header className="terminal-panel__header">
         <div>
-          <p className="terminal-panel__eyebrow">Intelligence Rail</p>
+          <p className="terminal-panel__eyebrow">智能侧栏</p>
           <h2 className="terminal-panel__title">预测面板</h2>
         </div>
       </header>

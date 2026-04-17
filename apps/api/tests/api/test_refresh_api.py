@@ -40,9 +40,44 @@ def test_post_refresh_enqueues_task_and_returns_status() -> None:
     payload = response.json()
     assert isinstance(payload["task_id"], int)
     assert payload["stock_code"] == "600010"
-    assert payload["status"] == "queued"
+    assert payload["status"] in {"queued", "running", "success", "partial"}
     assert payload["created_at"]
     assert payload["reused"] is False
+
+
+def test_post_refresh_executes_task_via_background_runner(monkeypatch) -> None:
+    from fastapi.testclient import TestClient
+
+    from swinginsight.api.main import create_app
+    from swinginsight.db.models.refresh import StockRefreshTask
+    from swinginsight.services.stock_refresh_service import StockRefreshService
+
+    session_factory = build_session_factory()
+    executed_task_ids: list[int] = []
+
+    def fake_run(self, task_id: int):
+        task = self.session.get(StockRefreshTask, task_id)
+        assert task is not None
+        task.status = "success"
+        self.session.commit()
+        executed_task_ids.append(task_id)
+        return task
+
+    monkeypatch.setattr(StockRefreshService, "run", fake_run)
+
+    app = create_app(session_factory=session_factory)
+    client = TestClient(app)
+
+    response = client.post("/stocks/600010/refresh")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert executed_task_ids == [payload["task_id"]]
+
+    with session_factory() as session:
+        task = session.get(StockRefreshTask, payload["task_id"])
+        assert task is not None
+        assert task.status == "success"
 
 
 def test_get_refresh_status_returns_latest_task_payload() -> None:

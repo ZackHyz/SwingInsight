@@ -134,7 +134,7 @@ describe("prediction panel", () => {
       />
     );
 
-    expect(screen.getByText("Intelligence Rail")).toBeTruthy();
+    expect(screen.getByText("智能侧栏")).toBeTruthy();
     const panel = screen.getByRole("heading", { name: "预测面板" }).closest("aside");
     expect(panel).toBeTruthy();
     const scoped = within(panel as HTMLElement);

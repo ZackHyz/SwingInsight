@@ -43,20 +43,20 @@ export default function SegmentDetailPage(props: SegmentDetailPageProps) {
   return (
     <AppShell
       currentPath={`/segments/${segmentId}`}
-      title={`Segment ${segmentId}`}
-      subtitle={`Drill into the selected pattern segment, inspect summary metrics, and trace related events.`}
+      title={`波段 ${segmentId}`}
+      subtitle="下钻查看选中形态波段，核对摘要指标并追踪相关事件。"
       topBarContent={
         <>
-          <StatusPill label={`Segment ${pageData.segment.id}`} />
-          <StatusPill label={pageData.segment.trend_direction === "up" ? "Up Trend" : "Down Trend"} tone={getTrendTone(pageData.segment.trend_direction)} />
+          <StatusPill label={`波段 ${pageData.segment.id}`} />
+          <StatusPill label={pageData.segment.trend_direction === "up" ? "上行趋势" : "下行趋势"} tone={getTrendTone(pageData.segment.trend_direction)} />
         </>
       }
     >
-      <TerminalPanel title="Segment Drill-Down" eyebrow="Pattern Analysis">
+      <TerminalPanel title="波段拆解" eyebrow="形态分析">
         <SegmentSummaryCard segment={pageData.segment} />
       </TerminalPanel>
       <NewsTimeline items={pageData.news_timeline} />
-      <TerminalPanel title="标签面板" eyebrow="Label Context">
+      <TerminalPanel title="标签面板" eyebrow="标签语境">
         <p className="terminal-copy">
           {pageData.labels.length === 0 ? "标签占位" : pageData.labels.map((label) => label.label_name).join(", ")}
         </p>

@@ -4,7 +4,7 @@ from datetime import date
 from pathlib import Path
 import sys
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy import text
 from sqlalchemy.orm import sessionmaker
 
@@ -18,6 +18,26 @@ def build_session():
     engine = create_engine("sqlite+pysqlite:///:memory:", future=True)
     Base.metadata.create_all(engine)
     return sessionmaker(bind=engine, future=True, expire_on_commit=False)()
+
+
+def test_predict_replaces_existing_prediction_for_same_stock_and_date() -> None:
+    from swinginsight.db.models.prediction import PredictionResult
+    from swinginsight.services.prediction_service import PredictionService
+
+    session = build_session()
+    seed_prediction_context(session)
+
+    PredictionService(session).predict("000001", date(2024, 6, 28))
+    PredictionService(session).predict("000001", date(2024, 6, 28))
+
+    rows = session.scalars(
+        select(PredictionResult).where(
+            PredictionResult.stock_code == "000001",
+            PredictionResult.predict_date == date(2024, 6, 28),
+        )
+    ).all()
+
+    assert len(rows) == 1
 
 
 def seed_prediction_context(session):

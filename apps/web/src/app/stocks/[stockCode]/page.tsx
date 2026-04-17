@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 
 import { AppShell } from "../../../components/app-shell";
 import { PredictionPanel } from "../../../components/prediction-panel";
@@ -124,6 +124,8 @@ export default function StockResearchPage(props: StockResearchPageProps) {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [reloadVersion, setReloadVersion] = useState(0);
   const refreshStatus = useRefreshStatus(activeStockCode, client);
+  const requestedRefreshStockCodeRef = useRef<string | null>(null);
+  const appliedRefreshSyncKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
     setActiveStockCode(initialStockCode);
@@ -170,7 +172,7 @@ export default function StockResearchPage(props: StockResearchPageProps) {
       })
       .catch((error: unknown) => {
         if (!cancelled) {
-          const message = error instanceof Error ? error.message : "Failed to load stock research";
+          const message = error instanceof Error ? error.message : "加载研究数据失败";
           setLoadError(message);
         }
       });
@@ -178,6 +180,40 @@ export default function StockResearchPage(props: StockResearchPageProps) {
       cancelled = true;
     };
   }, [activeStockCode, client, initialStockCode, props.initialData, reloadVersion]);
+
+  useEffect(() => {
+    const startRefresh = client.startStockRefresh;
+    if (!activeStockCode || startRefresh === undefined) {
+      return;
+    }
+    if (requestedRefreshStockCodeRef.current === activeStockCode) {
+      return;
+    }
+
+    requestedRefreshStockCodeRef.current = activeStockCode;
+    startRefresh(activeStockCode).catch(() => {
+      requestedRefreshStockCodeRef.current = null;
+    });
+  }, [activeStockCode, client]);
+
+  useEffect(() => {
+    const status = refreshStatus.data?.status;
+    const syncTime = refreshStatus.data?.end_time ?? refreshStatus.data?.updated_at ?? null;
+    if (requestedRefreshStockCodeRef.current !== activeStockCode) {
+      return;
+    }
+    if ((status !== "success" && status !== "partial") || syncTime === null) {
+      return;
+    }
+    const syncKey = `${refreshStatus.data?.task_id ?? "none"}:${syncTime}`;
+    if (appliedRefreshSyncKeyRef.current === syncKey) {
+      return;
+    }
+    appliedRefreshSyncKeyRef.current = syncKey;
+    setPageData(null);
+    setLoadError(null);
+    setReloadVersion((current) => current + 1);
+  }, [refreshStatus.data]);
 
   function handleSearchSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -200,10 +236,10 @@ export default function StockResearchPage(props: StockResearchPageProps) {
   }
 
   const isLoading = pageData === null && loadError === null;
-  const shellTitle = pageData === null ? `Research ${activeStockCode}` : `${pageData.stock.stock_name} (${pageData.stock.stock_code})`;
+  const shellTitle = pageData === null ? `研究台 ${activeStockCode}` : `${pageData.stock.stock_name} (${pageData.stock.stock_code})`;
   const shellSubtitle =
     pageData === null
-      ? "Terminal workspace is syncing chart context, turning points, and prediction intelligence."
+      ? "研究工作台正在同步图表上下文、拐点修正和预测洞察。"
       : `${pageData.stock.market} ${pageData.stock.industry ? `/ ${pageData.stock.industry}` : ""} · 当前状态 ${pageData.current_state.label}`;
   const refreshPillLabel = refreshStatus.error
     ? "最近刷新 查询失败"
@@ -235,7 +271,7 @@ export default function StockResearchPage(props: StockResearchPageProps) {
               {isLoading ? "搜索中..." : "搜索"}
             </button>
           </form>
-          <StatusPill label={isLoading ? "Syncing Workspace" : "Research Live"} tone={isLoading ? "warning" : "default"} />
+          <StatusPill label={isLoading ? "工作台同步中" : "研究已就绪"} tone={isLoading ? "warning" : "default"} />
           <StatusPill label={refreshPillLabel} tone={refreshPillTone} />
         </>
       }
@@ -244,19 +280,19 @@ export default function StockResearchPage(props: StockResearchPageProps) {
 
       {pageData === null ? (
         <section className="terminal-grid terminal-grid--workspace terminal-grid--workspace-priority" data-testid="research-workspace">
-          <TerminalPanel title="Instrument Context" eyebrow="Research Context">
+          <TerminalPanel title="标的上下文" eyebrow="研究上下文">
             <div className="terminal-banner terminal-banner--info">
               {loadError ?? `${activeStockCode} 的身份、当前状态和事件摘要会在研究数据返回后填充。`}
             </div>
           </TerminalPanel>
 
-          <TerminalPanel title="Chart Workspace" eyebrow="Core Workspace">
+          <TerminalPanel title="图表工作台" eyebrow="核心工作区">
             <div className="terminal-banner terminal-banner--info">
               {loadError === null ? "正在加载真实行情数据..." : `加载失败: ${loadError}`}
             </div>
           </TerminalPanel>
 
-          <TerminalPanel title="Intelligence Rail" eyebrow="Decision Support">
+          <TerminalPanel title="智能侧栏" eyebrow="决策支持">
             <div className="terminal-banner terminal-banner--info">
               {loadError === null ? "预测概率、风险提示与相似样本会在研究数据返回后显示。" : "当前无法生成智能解释层。"}
             </div>
@@ -265,7 +301,7 @@ export default function StockResearchPage(props: StockResearchPageProps) {
       ) : (
         <>
           <section className="terminal-grid terminal-grid--workspace terminal-grid--workspace-priority" data-testid="research-workspace">
-            <TerminalPanel title="Instrument Context" eyebrow="Research Context">
+            <TerminalPanel title="标的上下文" eyebrow="研究上下文">
               <div className="terminal-button-row">
                 <StatusPill label={pageData.current_state.label} tone={getStateTone(pageData.current_state.label)} />
                 {pageData.stock.market ? <StatusPill label={pageData.stock.market} /> : null}
@@ -274,28 +310,28 @@ export default function StockResearchPage(props: StockResearchPageProps) {
 
               <div className="terminal-stack">
                 <div>
-                  <p className="terminal-section-label">State Summary</p>
+                  <p className="terminal-section-label">状态摘要</p>
                   <p className="terminal-copy">{pageData.current_state.summary}</p>
                 </div>
 
                 <div className="terminal-inline-metrics">
                   <div className="metric-card">
-                    <p className="metric-card__eyebrow">Trading Days</p>
+                    <p className="metric-card__eyebrow">交易日数</p>
                     <p className="metric-card__value">{pageData.prices.length}</p>
                   </div>
                   <div className="metric-card">
-                    <p className="metric-card__eyebrow">News Events</p>
+                    <p className="metric-card__eyebrow">新闻事件</p>
                     <p className="metric-card__value">{pageData.news_items.length}</p>
                   </div>
                   <div className="metric-card">
-                    <p className="metric-card__eyebrow">Trade Marks</p>
+                    <p className="metric-card__eyebrow">交易标记</p>
                     <p className="metric-card__value">{pageData.trade_markers.length}</p>
                   </div>
                 </div>
 
                 {pageData.current_state.news_summary ? (
                   <div className="terminal-stack">
-                    <p className="terminal-section-label">Window News Summary</p>
+                    <p className="terminal-section-label">窗口新闻摘要</p>
                     <div className="terminal-chip-list">
                       <StatusPill label={`窗口新闻 ${formatMetricValue(pageData.current_state.news_summary.window_news_count)}`} />
                       <StatusPill label={`公告 ${formatMetricValue(pageData.current_state.news_summary.announcement_count)}`} tone="warning" />
@@ -318,7 +354,7 @@ export default function StockResearchPage(props: StockResearchPageProps) {
               </div>
             </TerminalPanel>
 
-            <TerminalPanel title="Chart Workspace" eyebrow="Core Workspace">
+            <TerminalPanel title="图表工作台" eyebrow="核心工作区">
               <TurningPointEditor
                 stockCode={activeStockCode}
                 initialData={pageData}
@@ -345,7 +381,7 @@ export default function StockResearchPage(props: StockResearchPageProps) {
             />
           </section>
 
-          <TerminalPanel title="Event Flow" eyebrow="Catalysts">
+          <TerminalPanel title="事件流" eyebrow="催化因素">
             <ul className="terminal-list">
               {pageData.news_items.map((item) => {
                 const tags = item.display_tags && item.display_tags.length > 0 ? item.display_tags : [resolveNewsBadge(item)];
@@ -370,7 +406,7 @@ export default function StockResearchPage(props: StockResearchPageProps) {
                           );
                         })}
                         <span className="terminal-copy-muted">
-                          {[item.source_name ?? "未知来源", item.news_date ?? "unknown-date"].join(" · ")}
+                          {[item.source_name ?? "未知来源", item.news_date ?? "未知日期"].join(" · ")}
                         </span>
                       </div>
 
