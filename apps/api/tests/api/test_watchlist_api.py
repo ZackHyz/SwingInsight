@@ -164,5 +164,11 @@ def test_watchlist_refresh_endpoint_rebuilds_latest_rows(monkeypatch) -> None:
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["scan_date"] == "2026-04-17"
-    assert payload["rows"][0]["stock_code"] == "600010"
+    assert payload["status"] in {"queued", "running", "success"}
+
+    status_response = client.get("/watchlist/refresh-status")
+    assert status_response.status_code == 200
+    status_payload = status_response.json()
+    assert status_payload["status"] == "success"
+    assert status_payload["scan_date"] == "2026-04-17"
+    assert status_payload["row_count"] == 1

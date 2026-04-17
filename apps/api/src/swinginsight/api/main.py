@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 
-from datetime import date
+from datetime import UTC, date, datetime
 
 from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException
 from sqlalchemy.orm import Session
@@ -30,6 +30,8 @@ from swinginsight.api.schemas.turning_points import StockResearchResponse, Turni
 def create_app(session_factory: Callable[[], Session] | None = None) -> FastAPI:
     app = FastAPI(title="SwingInsight API")
     task_session_factory = session_factory or get_default_session_factory()
+    app.state.watchlist_refresh_task_id = 0
+    app.state.watchlist_refresh_status = None
 
     @contextmanager
     def default_session_factory() -> Iterator[Session]:
@@ -47,6 +49,55 @@ def create_app(session_factory: Callable[[], Session] | None = None) -> FastAPI:
         session = task_session_factory()
         try:
             StockRefreshService(session).run(task_id)
+        finally:
+            session.close()
+
+    def serialize_watchlist_refresh_status() -> dict[str, object] | None:
+        payload = app.state.watchlist_refresh_status
+        if payload is None:
+            return None
+        return dict(payload)
+
+    def run_watchlist_refresh_task(task_id: int) -> None:
+        app.state.watchlist_refresh_status = {
+            "task_id": task_id,
+            "status": "running",
+            "created_at": app.state.watchlist_refresh_status["created_at"],
+            "start_time": datetime.now(UTC).isoformat(),
+            "end_time": None,
+            "updated_at": datetime.now(UTC).isoformat(),
+            "error_message": None,
+            "scan_date": None,
+            "row_count": None,
+        }
+        session = task_session_factory()
+        try:
+            from swinginsight.services.market_watchlist_service import MarketWatchlistService
+
+            payload = MarketWatchlistService(session).refresh_watchlist(limit=30)
+            app.state.watchlist_refresh_status = {
+                "task_id": task_id,
+                "status": "success",
+                "created_at": app.state.watchlist_refresh_status["created_at"],
+                "start_time": app.state.watchlist_refresh_status["start_time"],
+                "end_time": datetime.now(UTC).isoformat(),
+                "updated_at": datetime.now(UTC).isoformat(),
+                "error_message": None,
+                "scan_date": payload.get("scan_date"),
+                "row_count": len(payload.get("rows", [])),
+            }
+        except Exception as exc:
+            app.state.watchlist_refresh_status = {
+                "task_id": task_id,
+                "status": "failed",
+                "created_at": app.state.watchlist_refresh_status["created_at"],
+                "start_time": app.state.watchlist_refresh_status["start_time"],
+                "end_time": datetime.now(UTC).isoformat(),
+                "updated_at": datetime.now(UTC).isoformat(),
+                "error_message": str(exc),
+                "scan_date": None,
+                "row_count": None,
+            }
         finally:
             session.close()
 
@@ -150,10 +201,44 @@ def create_app(session_factory: Callable[[], Session] | None = None) -> FastAPI:
         return get_watchlist_payload(session=session)
 
     @app.post("/watchlist/refresh")
-    def refresh_watchlist(session: Session = Depends(get_session)) -> dict[str, object]:
-        from swinginsight.services.market_watchlist_service import MarketWatchlistService
+    def refresh_watchlist(background_tasks: BackgroundTasks) -> dict[str, object]:
+        existing = serialize_watchlist_refresh_status()
+        if existing is not None and existing["status"] in {"queued", "running"}:
+            return {**existing, "reused": True}
 
-        return MarketWatchlistService(session).refresh_watchlist(limit=30)
+        task_id = int(app.state.watchlist_refresh_task_id) + 1
+        app.state.watchlist_refresh_task_id = task_id
+        created_at = datetime.now(UTC).isoformat()
+        app.state.watchlist_refresh_status = {
+            "task_id": task_id,
+            "status": "queued",
+            "created_at": created_at,
+            "start_time": None,
+            "end_time": None,
+            "updated_at": created_at,
+            "error_message": None,
+            "scan_date": None,
+            "row_count": None,
+        }
+        background_tasks.add_task(run_watchlist_refresh_task, task_id)
+        return {**serialize_watchlist_refresh_status(), "reused": False}
+
+    @app.get("/watchlist/refresh-status")
+    def get_watchlist_refresh_status() -> dict[str, object]:
+        payload = serialize_watchlist_refresh_status()
+        if payload is None:
+            return {
+                "task_id": None,
+                "status": "idle",
+                "created_at": None,
+                "start_time": None,
+                "end_time": None,
+                "updated_at": None,
+                "error_message": None,
+                "scan_date": None,
+                "row_count": None,
+            }
+        return payload
 
     @app.get("/predictions/{stock_code}")
     def get_prediction(stock_code: str, predict_date: date, session: Session = Depends(get_session)) -> dict[str, object]:

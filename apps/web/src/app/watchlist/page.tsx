@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { AppShell } from "../../components/app-shell";
 import { StatusPill } from "../../components/status-pill";
 import { TerminalPanel } from "../../components/terminal-panel";
+import { useWatchlistRefreshStatus } from "../../hooks/use-watchlist-refresh-status";
 import { apiClient, type ApiClient, type MarketWatchlistData } from "../../lib/api";
 import { getMarketValueClass } from "../../lib/market-tone";
 
@@ -21,6 +22,10 @@ export default function WatchlistPage({ initialData, apiClient: client }: Watchl
   const api = client ?? apiClient;
   const [data, setData] = useState<MarketWatchlistData | null>(initialData ?? null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [watchlistRequestVersion, setWatchlistRequestVersion] = useState(0);
+  const [watchlistRefreshRequested, setWatchlistRefreshRequested] = useState(false);
+  const appliedRefreshTaskIdRef = useRef<number | null>(null);
+  const refreshStatus = useWatchlistRefreshStatus(watchlistRefreshRequested, api);
 
   useEffect(() => {
     if (initialData !== undefined) {
@@ -33,14 +38,16 @@ export default function WatchlistPage({ initialData, apiClient: client }: Watchl
       setLoadError("当前环境未提供 watchlist 数据接口。");
       return;
     }
+    if (api.startWatchlistRefresh !== undefined && refreshStatus.data?.status !== "success" && appliedRefreshTaskIdRef.current === null) {
+      return;
+    }
 
     let cancelled = false;
     setData(null);
     setLoadError(null);
-    const loadWatchlist = api.refreshWatchlist ?? api.getWatchlist;
+    const loadWatchlist = api.startWatchlistRefresh === undefined && api.refreshWatchlist !== undefined ? api.refreshWatchlist : api.getWatchlist;
     if (loadWatchlist === undefined) {
-      setData(null);
-      setLoadError("当前环境未提供 watchlist 刷新接口。");
+      setLoadError("当前环境未提供 watchlist 数据接口。");
       return;
     }
 
@@ -60,11 +67,60 @@ export default function WatchlistPage({ initialData, apiClient: client }: Watchl
     return () => {
       cancelled = true;
     };
+  }, [api, initialData, refreshStatus.data?.status, watchlistRequestVersion]);
+
+  useEffect(() => {
+    if (initialData !== undefined) {
+      setWatchlistRefreshRequested(false);
+      return;
+    }
+    const startWatchlistRefresh = api.startWatchlistRefresh;
+    if (startWatchlistRefresh === undefined) {
+      if (api.refreshWatchlist !== undefined) {
+        setWatchlistRequestVersion((current) => current + 1);
+      }
+      return;
+    }
+
+    let cancelled = false;
+    setWatchlistRefreshRequested(true);
+    startWatchlistRefresh()
+      .catch((error: unknown) => {
+        if (!cancelled) {
+          const message = error instanceof Error ? error.message : "Failed to start watchlist refresh";
+          setLoadError(message);
+          setWatchlistRefreshRequested(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [api, initialData]);
+
+  useEffect(() => {
+    if (!watchlistRefreshRequested || api.getWatchlist === undefined) {
+      return;
+    }
+    const status = refreshStatus.data?.status;
+    const taskId = refreshStatus.data?.task_id ?? null;
+    if (status === "success" && taskId !== null) {
+      if (appliedRefreshTaskIdRef.current === taskId) {
+        return;
+      }
+      appliedRefreshTaskIdRef.current = taskId;
+      setWatchlistRequestVersion((current) => current + 1);
+      return;
+    }
+    if (status === "failed") {
+      const message = refreshStatus.data?.error_message ?? "观察池刷新失败";
+      setLoadError(message);
+    }
+  }, [api, refreshStatus.data, watchlistRefreshRequested]);
 
   const rows = data?.rows ?? [];
   const topRow = rows[0] ?? null;
-  const isLoading = data === null && loadError === null;
+  const isLoading = (data === null && loadError === null) || refreshStatus.data?.status === "queued" || refreshStatus.data?.status === "running";
   const scanDate = data?.scan_date ?? null;
 
   return (
@@ -75,13 +131,17 @@ export default function WatchlistPage({ initialData, apiClient: client }: Watchl
       topBarContent={
         <>
           <StatusPill label={`扫描日 ${scanDate ?? "--"}`} />
+          <StatusPill
+            label={`刷新 ${refreshStatus.data?.status === "running" ? "进行中" : refreshStatus.data?.status === "queued" ? "排队中" : refreshStatus.data?.status === "success" ? "已完成" : refreshStatus.data?.status === "failed" ? "失败" : "待命"}`}
+            tone={refreshStatus.data?.status === "success" ? "success" : refreshStatus.data?.status === "failed" ? "danger" : "warning"}
+          />
           <StatusPill label={`候选数 ${rows.length}`} tone={rows.length > 0 ? "success" : "default"} />
         </>
       }
     >
       <TerminalPanel title="扫描摘要" eyebrow="夜间扫描">
         {isLoading ? (
-          <p className="terminal-copy">正在加载夜间扫描结果...</p>
+          <p className="terminal-copy">正在刷新并重算观察池，请稍候...</p>
         ) : loadError !== null ? (
           <p className="terminal-copy">加载扫描结果失败: {loadError}</p>
         ) : topRow === null ? (

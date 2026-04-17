@@ -166,6 +166,8 @@ export type ApiClient = {
   getStockResearch: (stockCode: string) => Promise<StockResearchData>;
   startStockRefresh?: (stockCode: string) => Promise<StockRefreshTaskData>;
   getStockRefreshStatus?: (stockCode: string) => Promise<StockRefreshStatusData>;
+  startWatchlistRefresh?: () => Promise<WatchlistRefreshTaskData>;
+  getWatchlistRefreshStatus?: () => Promise<WatchlistRefreshTaskData>;
   commitTurningPoints: (stockCode: string, payload: TurningPointCommitPayload) => Promise<TurningPointCommitResponse>;
   getSegmentChartWindow: (segmentId: string) => Promise<SegmentChartWindowData>;
   getSegmentDetail: (segmentId: string) => Promise<SegmentDetailData>;
@@ -191,6 +193,7 @@ export type PatternScoreData = {
 };
 
 export type StockRefreshStatus = "queued" | "running" | "success" | "failed" | "partial";
+export type WatchlistRefreshStatus = "idle" | "queued" | "running" | "success" | "failed";
 
 export type StockRefreshTaskData = {
   task_id: number;
@@ -203,6 +206,18 @@ export type StockRefreshTaskData = {
 };
 
 export type StockRefreshStatusData = StockRefreshTaskData;
+export type WatchlistRefreshTaskData = {
+  task_id: number | null;
+  status: WatchlistRefreshStatus;
+  created_at?: string | null;
+  start_time?: string | null;
+  end_time?: string | null;
+  updated_at?: string | null;
+  error_message?: string | null;
+  scan_date?: string | null;
+  row_count?: number | null;
+  reused?: boolean;
+};
 
 export type PatternSimilarCaseData = {
   window_id?: number | null;
@@ -318,6 +333,20 @@ export const apiClient: ApiClient = {
       throw new Error(`Failed to load stock refresh status: ${response.status}`);
     }
     return (await response.json()) as StockRefreshStatusData;
+  },
+  async startWatchlistRefresh() {
+    const response = await fetch(`${API_BASE}/watchlist/refresh`, { method: "POST" });
+    if (!response.ok) {
+      throw new Error(`Failed to start watchlist refresh: ${response.status}`);
+    }
+    return (await response.json()) as WatchlistRefreshTaskData;
+  },
+  async getWatchlistRefreshStatus() {
+    const response = await fetch(`${API_BASE}/watchlist/refresh-status`);
+    if (!response.ok) {
+      throw new Error(`Failed to load watchlist refresh status: ${response.status}`);
+    }
+    return (await response.json()) as WatchlistRefreshTaskData;
   },
   async commitTurningPoints(stockCode, payload) {
     const response = await fetch(`${API_BASE}/stocks/${stockCode}/turning-points/commit`, {

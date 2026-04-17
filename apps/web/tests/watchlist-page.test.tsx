@@ -52,7 +52,25 @@ describe("watchlist page", () => {
 
   it("loads watchlist data from api when initial data is absent", async () => {
     const getWatchlist = vi.fn<NonNullable<ApiClient["getWatchlist"]>>().mockResolvedValue(buildData());
-    const refreshWatchlist = vi.fn<NonNullable<ApiClient["refreshWatchlist"]>>().mockResolvedValue(buildData());
+    const startWatchlistRefresh = vi.fn<NonNullable<ApiClient["startWatchlistRefresh"]>>().mockResolvedValue({
+      task_id: 1,
+      status: "queued",
+      created_at: "2026-04-17T00:00:00Z",
+      updated_at: "2026-04-17T00:00:00Z",
+      scan_date: null,
+      row_count: null,
+    });
+    const getWatchlistRefreshStatus = vi
+      .fn<NonNullable<ApiClient["getWatchlistRefreshStatus"]>>()
+      .mockResolvedValue({
+        task_id: 1,
+        status: "success",
+        created_at: "2026-04-17T00:00:00Z",
+        updated_at: "2026-04-17T00:00:01Z",
+        end_time: "2026-04-17T00:00:01Z",
+        scan_date: "2026-04-17",
+        row_count: 2,
+      });
     const client: ApiClient = {
       getStockResearch: vi.fn(),
       commitTurningPoints: vi.fn(),
@@ -61,7 +79,8 @@ describe("watchlist page", () => {
       getSegmentLibrary: vi.fn(),
       getPrediction: vi.fn(),
       getWatchlist,
-      refreshWatchlist,
+      startWatchlistRefresh,
+      getWatchlistRefreshStatus,
     };
 
     render(<WatchlistPage apiClient={client} />);
@@ -69,10 +88,11 @@ describe("watchlist page", () => {
     expect(screen.getByText("候选池同步中...")).toBeTruthy();
 
     await waitFor(() => {
-      expect(refreshWatchlist).toHaveBeenCalledTimes(1);
+      expect(startWatchlistRefresh).toHaveBeenCalledTimes(1);
+      expect(getWatchlistRefreshStatus).toHaveBeenCalledTimes(1);
+      expect(getWatchlist).toHaveBeenCalledTimes(1);
       expect(screen.getByRole("link", { name: "000001" })).toBeTruthy();
     });
-    expect(getWatchlist).toHaveBeenCalledTimes(0);
     expect(screen.queryByText("候选池同步中...")).toBeNull();
   });
 });
