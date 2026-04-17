@@ -6,6 +6,7 @@ import { AppShell } from "../../components/app-shell";
 import { StatusPill } from "../../components/status-pill";
 import { TerminalPanel } from "../../components/terminal-panel";
 import { useWatchlistRefreshStatus } from "../../hooks/use-watchlist-refresh-status";
+import { formatShanghaiDateTime } from "../../lib/datetime";
 import { apiClient, type ApiClient, type MarketWatchlistData } from "../../lib/api";
 import { getMarketValueClass } from "../../lib/market-tone";
 
@@ -16,17 +17,6 @@ type WatchlistPageProps = {
 
 function formatPercent(value: number): string {
   return `${(value * 100).toFixed(1)}%`;
-}
-
-function formatDateTime(value: string | null | undefined): string {
-  if (!value) {
-    return "--";
-  }
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    return value;
-  }
-  return parsed.toLocaleString("zh-CN", { hour12: false });
 }
 
 export default function WatchlistPage({ initialData, apiClient: client }: WatchlistPageProps) {
@@ -159,7 +149,7 @@ export default function WatchlistPage({ initialData, apiClient: client }: Watchl
       topBarContent={
         <>
           <StatusPill label={`扫描日 ${scanDate ?? "--"}`} />
-          <StatusPill label={`本次刷新完成 ${formatDateTime(refreshCompletedAt)}`} tone={refreshCompletedAt ? "success" : "default"} />
+          <StatusPill label={`本次刷新完成 ${formatShanghaiDateTime(refreshCompletedAt)}`} tone={refreshCompletedAt ? "success" : "default"} />
           <StatusPill
             label={`刷新 ${refreshStatusLabel}`}
             tone={activeRefreshStatus === "success" ? "success" : activeRefreshStatus === "failed" ? "danger" : "warning"}
@@ -194,7 +184,7 @@ export default function WatchlistPage({ initialData, apiClient: client }: Watchl
             </div>
             <div className="metric-card">
               <p className="metric-card__eyebrow">榜首刷新时间</p>
-              <p className="metric-card__value">{formatDateTime(topRow.latest_refresh_at)}</p>
+              <p className="metric-card__value">{formatShanghaiDateTime(topRow.latest_refresh_at)}</p>
             </div>
           </div>
         )}
@@ -235,7 +225,7 @@ export default function WatchlistPage({ initialData, apiClient: client }: Watchl
                   <td>{formatPercent(row.confidence)}</td>
                   <td>{row.sample_count}</td>
                   <td>{row.event_density.toFixed(2)}</td>
-                  <td>{formatDateTime(row.latest_refresh_at)}</td>
+                  <td>{formatShanghaiDateTime(row.latest_refresh_at)}</td>
                 </tr>
               ))}
             </tbody>

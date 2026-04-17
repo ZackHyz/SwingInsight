@@ -9,6 +9,7 @@ import { TerminalPanel } from "../../../components/terminal-panel";
 import { TurningPointEditor } from "../../../components/turning-point-editor";
 import { useRefreshStatus } from "../../../hooks/use-refresh-status";
 import { apiClient, type ApiClient, type StockRefreshStatusData, type StockResearchData } from "../../../lib/api";
+import { formatShanghaiDateTime } from "../../../lib/datetime";
 import { getSignedTone, getStateTone } from "../../../lib/market-tone";
 
 type StockResearchPageProps = {
@@ -105,14 +106,7 @@ function resolveRefreshLabel(status: StockRefreshStatusData["status"] | undefine
 }
 
 function formatRefreshTime(value: string | null | undefined): string {
-  if (!value) {
-    return "--";
-  }
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    return value;
-  }
-  return parsed.toLocaleString("zh-CN", { hour12: false });
+  return formatShanghaiDateTime(value);
 }
 
 export default function StockResearchPage(props: StockResearchPageProps) {

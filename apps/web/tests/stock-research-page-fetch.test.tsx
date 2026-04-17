@@ -103,7 +103,7 @@ describe("stock research page fetch", () => {
     expect(screen.queryByLabelText("Primary")).toBeNull();
     expect(screen.getByText("标的上下文")).toBeTruthy();
     expect(screen.getByText("图表工作台")).toBeTruthy();
-    expect(screen.getByText("事件流")).toBeTruthy();
+    expect(screen.getByText("智能侧栏")).toBeTruthy();
     expect(await screen.findByText(/最近刷新/)).toBeTruthy();
     expect(screen.getByTestId("research-workspace").className).toContain("terminal-grid--workspace-priority");
     expect(apiClient.getStockResearch).toHaveBeenCalledWith("000001");
