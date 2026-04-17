@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import SegmentDetailPage from "../src/app/segments/[segmentId]/page";
@@ -42,12 +42,32 @@ function buildData(): SegmentDetailData {
         news_date: "2024-01-06",
       },
     ],
-    labels: [],
+    labels: [
+      {
+        label_type: "pattern",
+        label_name: "放量突破型",
+        label_value: "matched",
+      },
+    ],
   };
 }
 
 describe("segment detail page", () => {
   afterEach(() => cleanup());
+
+  it("loads detail data and renders pattern labels when initial data is absent", async () => {
+    const data = buildData();
+    const getSegmentDetail = vi.fn(async () => data);
+    const apiClient = {
+      getSegmentDetail,
+    } satisfies Partial<ApiClient>;
+
+    render(<SegmentDetailPage segmentId="1" apiClient={apiClient as ApiClient} />);
+
+    await waitFor(() => expect(getSegmentDetail).toHaveBeenCalledWith("1"));
+    expect(await screen.findByText("放量突破型")).toBeTruthy();
+    expect(screen.getByText("000001 波段详情")).toBeTruthy();
+  });
 
   it("renders segment summary and news timeline", () => {
     const apiClient: ApiClient = {
@@ -73,5 +93,6 @@ describe("segment detail page", () => {
     expect(screen.getByText("20.45%")).toBeTruthy();
     expect(screen.getByText("Bank support policy")).toBeTruthy();
     expect(screen.getByText("before_trough")).toBeTruthy();
+    expect(screen.getByText("放量突破型")).toBeTruthy();
   });
 });
