@@ -37,8 +37,14 @@ export default function WatchlistPage({ initialData, apiClient: client }: Watchl
     let cancelled = false;
     setData(null);
     setLoadError(null);
-    api
-      .getWatchlist()
+    const loadWatchlist = api.refreshWatchlist ?? api.getWatchlist;
+    if (loadWatchlist === undefined) {
+      setData(null);
+      setLoadError("当前环境未提供 watchlist 刷新接口。");
+      return;
+    }
+
+    loadWatchlist()
       .then((nextData) => {
         if (!cancelled) {
           setData(nextData);

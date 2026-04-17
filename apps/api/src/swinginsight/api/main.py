@@ -149,6 +149,12 @@ def create_app(session_factory: Callable[[], Session] | None = None) -> FastAPI:
     def get_watchlist(session: Session = Depends(get_session)) -> dict[str, object]:
         return get_watchlist_payload(session=session)
 
+    @app.post("/watchlist/refresh")
+    def refresh_watchlist(session: Session = Depends(get_session)) -> dict[str, object]:
+        from swinginsight.services.market_watchlist_service import MarketWatchlistService
+
+        return MarketWatchlistService(session).refresh_watchlist(limit=30)
+
     @app.get("/predictions/{stock_code}")
     def get_prediction(stock_code: str, predict_date: date, session: Session = Depends(get_session)) -> dict[str, object]:
         return get_prediction_payload(session=session, stock_code=stock_code, predict_date=predict_date)

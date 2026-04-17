@@ -10,6 +10,7 @@ from swinginsight.db.models.news import NewsRaw
 from swinginsight.db.models.prediction import PredictionResult
 from swinginsight.db.models.stock import StockBasic
 from swinginsight.db.models.watchlist import MarketScanResult
+from swinginsight.services.stock_refresh_service import StockRefreshService
 
 
 class MarketWatchlistService:
@@ -79,6 +80,16 @@ class MarketWatchlistService:
             )
         self.session.commit()
         return {"scan_date": resolved_scan_date.isoformat(), "rows": len(ranked)}
+
+    def refresh_watchlist(self, *, limit: int = 30) -> dict[str, object]:
+        stock_codes = self.session.scalars(select(StockBasic.stock_code).order_by(StockBasic.stock_code.asc())).all()
+        refresh_service = StockRefreshService(self.session)
+        for stock_code in stock_codes:
+            task = refresh_service.enqueue(stock_code)
+            refresh_service.run(task.id)
+
+        self.run_scan(scan_date=datetime.now(UTC).date(), top_k=max(limit, 1))
+        return self.get_latest_watchlist(limit=limit)
 
     def get_latest_watchlist(self, *, limit: int = 30) -> dict[str, object]:
         latest_scan_date = self.session.scalar(select(func.max(MarketScanResult.scan_date)))

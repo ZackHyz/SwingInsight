@@ -171,6 +171,7 @@ export type ApiClient = {
   getSegmentDetail: (segmentId: string) => Promise<SegmentDetailData>;
   getSegmentLibrary: () => Promise<SegmentLibraryData>;
   getWatchlist?: () => Promise<MarketWatchlistData>;
+  refreshWatchlist?: () => Promise<MarketWatchlistData>;
   getPrediction: (stockCode: string, predictDate: string) => Promise<PredictionData>;
   getPatternScore?: (stockCode: string) => Promise<PatternScoreData>;
   getPatternSimilarCases?: (stockCode: string) => Promise<PatternSimilarCaseData[]>;
@@ -356,6 +357,13 @@ export const apiClient: ApiClient = {
     const response = await fetch(`${API_BASE}/watchlist`);
     if (!response.ok) {
       throw new Error(`Failed to load watchlist: ${response.status}`);
+    }
+    return (await response.json()) as MarketWatchlistData;
+  },
+  async refreshWatchlist() {
+    const response = await fetch(`${API_BASE}/watchlist/refresh`, { method: "POST" });
+    if (!response.ok) {
+      throw new Error(`Failed to refresh watchlist: ${response.status}`);
     }
     return (await response.json()) as MarketWatchlistData;
   },

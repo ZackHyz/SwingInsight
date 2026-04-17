@@ -52,6 +52,7 @@ describe("watchlist page", () => {
 
   it("loads watchlist data from api when initial data is absent", async () => {
     const getWatchlist = vi.fn<NonNullable<ApiClient["getWatchlist"]>>().mockResolvedValue(buildData());
+    const refreshWatchlist = vi.fn<NonNullable<ApiClient["refreshWatchlist"]>>().mockResolvedValue(buildData());
     const client: ApiClient = {
       getStockResearch: vi.fn(),
       commitTurningPoints: vi.fn(),
@@ -60,6 +61,7 @@ describe("watchlist page", () => {
       getSegmentLibrary: vi.fn(),
       getPrediction: vi.fn(),
       getWatchlist,
+      refreshWatchlist,
     };
 
     render(<WatchlistPage apiClient={client} />);
@@ -67,9 +69,10 @@ describe("watchlist page", () => {
     expect(screen.getByText("候选池同步中...")).toBeTruthy();
 
     await waitFor(() => {
-      expect(getWatchlist).toHaveBeenCalledTimes(1);
+      expect(refreshWatchlist).toHaveBeenCalledTimes(1);
       expect(screen.getByRole("link", { name: "000001" })).toBeTruthy();
     });
+    expect(getWatchlist).toHaveBeenCalledTimes(0);
     expect(screen.queryByText("候选池同步中...")).toBeNull();
   });
 });

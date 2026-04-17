@@ -130,3 +130,39 @@ def test_watchlist_endpoint_returns_latest_scan_rows() -> None:
     assert payload["rows"]
     assert payload["rows"][0]["stock_code"] == "000001"
     assert payload["rows"][0]["rank_no"] == 1
+
+
+def test_watchlist_refresh_endpoint_rebuilds_latest_rows(monkeypatch) -> None:
+    from swinginsight.api.main import create_app
+    from swinginsight.services.market_watchlist_service import MarketWatchlistService
+
+    session_factory = build_session_factory()
+    app = create_app(session_factory=session_factory)
+    client = TestClient(app)
+
+    def fake_refresh(self, *, limit: int = 30) -> dict[str, object]:
+        return {
+            "scan_date": "2026-04-17",
+            "rows": [
+                {
+                    "stock_code": "600010",
+                    "stock_name": "包钢股份",
+                    "rank_no": 1,
+                    "rank_score": 0.81,
+                    "pattern_score": 0.79,
+                    "confidence": 1.0,
+                    "sample_count": 8,
+                    "event_density": 0.15,
+                    "latest_refresh_at": "2026-04-17T00:00:00",
+                }
+            ],
+        }
+
+    monkeypatch.setattr(MarketWatchlistService, "refresh_watchlist", fake_refresh)
+
+    response = client.post("/watchlist/refresh")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["scan_date"] == "2026-04-17"
+    assert payload["rows"][0]["stock_code"] == "600010"
