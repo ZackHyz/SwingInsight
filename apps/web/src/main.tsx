@@ -10,7 +10,7 @@ import "./styles/app-shell.css";
 
 function resolveStockCode(pathname: string): string {
   const match = pathname.match(/^\/stocks\/([^/]+)$/);
-  return match?.[1] ?? "600157";
+  return match?.[1] ?? "";
 }
 
 function resolveSegmentId(pathname: string): string {
@@ -31,11 +31,19 @@ function App() {
     return <WatchlistPage />;
   }
 
+  if (window.location.pathname === "/stocks") {
+    return <StockResearchPage stockCode="" />;
+  }
+
   if (window.location.pathname.startsWith("/segments/")) {
     return <SegmentDetailPage segmentId={resolveSegmentId(window.location.pathname)} />;
   }
 
-  return <StockResearchPage stockCode={resolveStockCode(window.location.pathname)} />;
+  if (window.location.pathname.startsWith("/stocks/")) {
+    return <StockResearchPage stockCode={resolveStockCode(window.location.pathname)} />;
+  }
+
+  return <HomePage />;
 }
 
 const root = document.getElementById("root");

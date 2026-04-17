@@ -14,7 +14,7 @@ type NavItem = {
 
 const NAV_ITEMS: NavItem[] = [
   { href: "/", label: "总览" },
-  { href: "/stocks/600157", label: "研究台" },
+  { href: "/stocks", label: "研究台" },
   { href: "/library", label: "形态库" },
   { href: "/watchlist", label: "观察池" },
 ];
@@ -23,7 +23,7 @@ function isActivePath(currentPath: string, href: string): boolean {
   if (href === "/") {
     return currentPath === "/";
   }
-  return currentPath === href || currentPath.startsWith(`${href}/`) || (href === "/stocks/600157" && currentPath.startsWith("/stocks/"));
+  return currentPath === href || currentPath.startsWith(`${href}/`);
 }
 
 export function AppShell({ currentPath, title, subtitle, topBarContent, children }: AppShellProps) {

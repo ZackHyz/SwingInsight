@@ -110,7 +110,7 @@ function formatRefreshTime(value: string | null | undefined): string {
 }
 
 export default function StockResearchPage(props: StockResearchPageProps) {
-  const initialStockCode = props.stockCode ?? "600157";
+  const initialStockCode = props.stockCode ?? "";
   const client = props.apiClient ?? apiClient;
   const [activeStockCode, setActiveStockCode] = useState(initialStockCode);
   const [searchCode, setSearchCode] = useState(initialStockCode);
@@ -150,6 +150,11 @@ export default function StockResearchPage(props: StockResearchPageProps) {
   useEffect(() => {
     if (props.initialData !== undefined && activeStockCode === initialStockCode && reloadVersion === 0) {
       setPageData(props.initialData);
+      setLoadError(null);
+      return;
+    }
+    if (!/^\d{6}$/.test(activeStockCode)) {
+      setPageData(null);
       setLoadError(null);
       return;
     }
@@ -229,11 +234,14 @@ export default function StockResearchPage(props: StockResearchPageProps) {
     setReloadVersion((current) => current + 1);
   }
 
-  const isLoading = pageData === null && loadError === null;
-  const shellTitle = pageData === null ? `研究台 ${activeStockCode}` : `${pageData.stock.stock_name} (${pageData.stock.stock_code})`;
+  const hasActiveStockCode = /^\d{6}$/.test(activeStockCode);
+  const isLoading = hasActiveStockCode && pageData === null && loadError === null;
+  const shellTitle = pageData === null ? (hasActiveStockCode ? `研究台 ${activeStockCode}` : "研究台") : `${pageData.stock.stock_name} (${pageData.stock.stock_code})`;
   const shellSubtitle =
     pageData === null
-      ? "研究工作台正在同步图表上下文、拐点修正和预测洞察。"
+      ? hasActiveStockCode
+        ? "研究工作台正在同步图表上下文、拐点修正和预测洞察。"
+        : "输入股票代码并点击搜索后开始加载研究数据。"
       : `${pageData.stock.market} ${pageData.stock.industry ? `/ ${pageData.stock.industry}` : ""} · 当前状态 ${pageData.current_state.label}`;
   const refreshPillLabel = refreshStatus.error
     ? "最近刷新 查询失败"
@@ -244,7 +252,7 @@ export default function StockResearchPage(props: StockResearchPageProps) {
 
   return (
     <AppShell
-      currentPath={`/stocks/${activeStockCode}`}
+      currentPath={hasActiveStockCode ? `/stocks/${activeStockCode}` : "/stocks"}
       title={shellTitle}
       subtitle={shellSubtitle}
       topBarContent={
@@ -265,8 +273,8 @@ export default function StockResearchPage(props: StockResearchPageProps) {
               {isLoading ? "搜索中..." : "搜索"}
             </button>
           </form>
-          <StatusPill label={isLoading ? "工作台同步中" : "研究已就绪"} tone={isLoading ? "warning" : "default"} />
-          <StatusPill label={refreshPillLabel} tone={refreshPillTone} />
+          <StatusPill label={isLoading ? "工作台同步中" : hasActiveStockCode ? "研究已就绪" : "待输入代码"} tone={isLoading ? "warning" : "default"} />
+          {hasActiveStockCode ? <StatusPill label={refreshPillLabel} tone={refreshPillTone} /> : null}
         </>
       }
     >
@@ -276,19 +284,19 @@ export default function StockResearchPage(props: StockResearchPageProps) {
         <section className="terminal-grid terminal-grid--workspace terminal-grid--workspace-priority" data-testid="research-workspace">
           <TerminalPanel title="标的上下文" eyebrow="研究上下文">
             <div className="terminal-banner terminal-banner--info">
-              {loadError ?? `${activeStockCode} 的身份、当前状态和事件摘要会在研究数据返回后填充。`}
+              {loadError ?? (hasActiveStockCode ? `${activeStockCode} 的身份、当前状态和事件摘要会在研究数据返回后填充。` : "输入股票代码并点击搜索后开始加载研究数据。")}
             </div>
           </TerminalPanel>
 
           <TerminalPanel title="图表工作台" eyebrow="核心工作区">
             <div className="terminal-banner terminal-banner--info">
-              {loadError === null ? "正在加载真实行情数据..." : `加载失败: ${loadError}`}
+              {loadError !== null ? `加载失败: ${loadError}` : hasActiveStockCode ? "正在加载真实行情数据..." : "等待输入股票代码后再启动搜索。"}
             </div>
           </TerminalPanel>
 
           <TerminalPanel title="智能侧栏" eyebrow="决策支持">
             <div className="terminal-banner terminal-banner--info">
-              {loadError === null ? "预测概率、风险提示与相似样本会在研究数据返回后显示。" : "当前无法生成智能解释层。"}
+              {loadError !== null ? "当前无法生成智能解释层。" : hasActiveStockCode ? "预测概率、风险提示与相似样本会在研究数据返回后显示。" : "输入股票代码后显示预测概率、风险提示与相似样本。"}
             </div>
           </TerminalPanel>
         </section>

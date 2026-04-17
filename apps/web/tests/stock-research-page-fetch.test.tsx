@@ -75,6 +75,27 @@ function buildRefreshStatus(status: StockRefreshStatusData["status"] = "success"
 describe("stock research page fetch", () => {
   afterEach(() => cleanup());
 
+  it("stays idle until a stock code is submitted manually", async () => {
+    const apiClient: ApiClient = {
+      getStockResearch: vi.fn(),
+      startStockRefresh: vi.fn(),
+      commitTurningPoints: vi.fn(),
+      getSegmentChartWindow: vi.fn(),
+      getSegmentDetail: vi.fn(),
+      getSegmentLibrary: vi.fn(),
+      getPrediction: vi.fn(),
+      getStockRefreshStatus: vi.fn(),
+    };
+
+    render(<StockResearchPage stockCode="" apiClient={apiClient} />);
+
+    expect(screen.getAllByText("输入股票代码并点击搜索后开始加载研究数据。")).toHaveLength(2);
+    expect(screen.getByRole("button", { name: "搜索" })).toBeTruthy();
+    expect(screen.getByDisplayValue("")).toBeTruthy();
+    expect(apiClient.getStockResearch).not.toHaveBeenCalled();
+    expect(apiClient.startStockRefresh).not.toHaveBeenCalled();
+  });
+
   it("loads stock research data when initial data is absent", async () => {
     const apiClient: ApiClient = {
       getStockResearch: vi.fn().mockResolvedValue(buildData()),

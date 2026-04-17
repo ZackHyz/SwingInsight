@@ -23,7 +23,7 @@ export default function HomePage() {
               从股票代码进入研究台，在同一套终端壳层里完成图表研判、事件追踪和历史形态比对。
             </p>
             <div className="terminal-actions">
-              <a className="terminal-button terminal-button--primary" href="/stocks/600157">
+              <a className="terminal-button terminal-button--primary" href="/stocks">
                 打开研究台
               </a>
               <a className="terminal-button" href="/library">
@@ -43,7 +43,7 @@ export default function HomePage() {
           <div className="terminal-form">
             <label>
               股票代码
-              <input readOnly value="600157" aria-label="Quick launch stock code" />
+              <input readOnly value="" placeholder="进入研究台后手动输入" aria-label="Quick launch stock code" />
             </label>
             <p className="terminal-copy">
               进入研究台后，可以在同一视图里修正拐点、查看图表上下文，并比对相似样本。
