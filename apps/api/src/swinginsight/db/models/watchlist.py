@@ -11,7 +11,7 @@ from swinginsight.db.base import BIGINT_TYPE, Base, CreatedAtMixin
 class MarketScanResult(CreatedAtMixin, Base):
     __tablename__ = "market_scan_result"
     __table_args__ = (
-        UniqueConstraint("scan_date", "stock_code"),
+        UniqueConstraint("scan_date", "stock_code", name="uq_market_scan_result_scan_date_stock_code"),
         Index("ix_market_scan_result_scan_date_rank_no", "scan_date", "rank_no"),
         Index("ix_market_scan_result_stock_code_scan_date", "stock_code", "scan_date"),
     )

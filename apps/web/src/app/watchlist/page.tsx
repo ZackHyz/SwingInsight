@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useState } from "react";
 
 import { AppShell } from "../../components/app-shell";
 import { StatusPill } from "../../components/status-pill";
@@ -13,20 +13,53 @@ type WatchlistPageProps = {
   apiClient?: ApiClient;
 };
 
-function buildFallbackData(): MarketWatchlistData {
-  return { scan_date: null, rows: [] };
-}
-
 function formatPercent(value: number): string {
   return `${(value * 100).toFixed(1)}%`;
 }
 
 export default function WatchlistPage({ initialData, apiClient: client }: WatchlistPageProps) {
-  const data = initialData ?? buildFallbackData();
   const api = client ?? apiClient;
-  void api;
+  const [data, setData] = useState<MarketWatchlistData | null>(initialData ?? null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
-  const topRow = useMemo(() => data.rows[0] ?? null, [data.rows]);
+  useEffect(() => {
+    if (initialData !== undefined) {
+      setData(initialData);
+      setLoadError(null);
+      return;
+    }
+    if (api.getWatchlist === undefined) {
+      setData(null);
+      setLoadError("当前环境未提供 watchlist 数据接口。");
+      return;
+    }
+
+    let cancelled = false;
+    setData(null);
+    setLoadError(null);
+    api
+      .getWatchlist()
+      .then((nextData) => {
+        if (!cancelled) {
+          setData(nextData);
+          setLoadError(null);
+        }
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) {
+          const message = error instanceof Error ? error.message : "Failed to load watchlist";
+          setLoadError(message);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [api, initialData]);
+
+  const rows = data?.rows ?? [];
+  const topRow = rows[0] ?? null;
+  const isLoading = data === null && loadError === null;
+  const scanDate = data?.scan_date ?? null;
 
   return (
     <AppShell
@@ -35,13 +68,17 @@ export default function WatchlistPage({ initialData, apiClient: client }: Watchl
       subtitle="Nightly market scan output ranked by pattern score, confidence, sample support, and event density."
       topBarContent={
         <>
-          <StatusPill label={`Scan ${data.scan_date ?? "--"}`} />
-          <StatusPill label={`Rows ${data.rows.length}`} tone={data.rows.length > 0 ? "success" : "default"} />
+          <StatusPill label={`Scan ${scanDate ?? "--"}`} />
+          <StatusPill label={`Rows ${rows.length}`} tone={rows.length > 0 ? "success" : "default"} />
         </>
       }
     >
       <TerminalPanel title="Scan Summary" eyebrow="Nightly Scan">
-        {topRow === null ? (
+        {isLoading ? (
+          <p className="terminal-copy">正在加载夜间扫描结果...</p>
+        ) : loadError !== null ? (
+          <p className="terminal-copy">加载扫描结果失败: {loadError}</p>
+        ) : topRow === null ? (
           <p className="terminal-copy">暂无扫描结果，请先运行夜间扫描任务。</p>
         ) : (
           <div className="terminal-inline-metrics">
@@ -62,7 +99,11 @@ export default function WatchlistPage({ initialData, apiClient: client }: Watchl
       </TerminalPanel>
 
       <TerminalPanel title="Leaderboard" eyebrow="Market Candidates">
-        {data.rows.length === 0 ? (
+        {isLoading ? (
+          <p className="terminal-copy">候选池同步中...</p>
+        ) : loadError !== null ? (
+          <p className="terminal-copy">当前无法加载候选池: {loadError}</p>
+        ) : rows.length === 0 ? (
           <p className="terminal-copy">当前没有可展示的候选池。</p>
         ) : (
           <table className="terminal-table">
@@ -77,7 +118,7 @@ export default function WatchlistPage({ initialData, apiClient: client }: Watchl
               </tr>
             </thead>
             <tbody>
-              {data.rows.map((row) => (
+              {rows.map((row) => (
                 <tr key={row.stock_code}>
                   <td>{row.rank_no}</td>
                   <td>
